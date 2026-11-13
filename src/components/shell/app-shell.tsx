@@ -3,28 +3,34 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
-import { Building2, Contact, Inbox, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, Truck } from "lucide-react";
+import { Building2, Contact, FileSpreadsheet, Inbox, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, Truck, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { countsQuery, meQuery } from "@/lib/api/queries";
+import { NoAccess } from "@/components/shell/no-access";
+import { countsQuery, keys, meQuery } from "@/lib/api/queries";
 import { errorMessage, request } from "@/lib/api/http";
 import type { Counts } from "@/lib/api-types";
+import type { RouteKey } from "@/lib/routes";
+import { routeFor } from "@/lib/access";
 import { toggleTheme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 type Badge = { value: number; hot: boolean } | null;
-const NAV: { href: string; label: string; icon: React.ElementType; badge: (c?: Counts) => Badge }[] = [
-  { href: "/clients", label: "Clients", icon: Building2, badge: (c) => c ? { value: c.companies, hot: false } : null },
+const none = (): Badge => null;
+const NAV: { href: string; label: string; icon: React.ElementType; route: RouteKey; badge: (c?: Counts) => Badge }[] = [
+  { href: "/clients", label: "Clients", icon: Building2, route: "directory", badge: (c) => c ? { value: c.companies, hot: false } : null },
   // Probity shows unmatched rows when there are any, else the total.
-  { href: "/probity", label: "Probity", icon: ShieldCheck, badge: (c) => c ? (c.probityUnmatched ? { value: c.probityUnmatched, hot: true } : { value: c.probity, hot: false }) : null },
-  { href: "/needs-company", label: "Needs company", icon: Inbox, badge: (c) => c ? { value: c.needsCompany, hot: c.needsCompany > 0 } : null },
-  { href: "/suppliers", label: "OPS suppliers", icon: Truck, badge: (c) => c ? { value: c.suppliers, hot: false } : null },
-  { href: "/dept-emails", label: "Dept. emails", icon: Contact, badge: (c) => c ? { value: c.deptEmails, hot: false } : null },
+  { href: "/probity", label: "Probity", icon: ShieldCheck, route: "directory", badge: (c) => c ? (c.probityUnmatched ? { value: c.probityUnmatched, hot: true } : { value: c.probity, hot: false }) : null },
+  { href: "/needs-company", label: "Needs company", icon: Inbox, route: "directory", badge: (c) => c ? { value: c.needsCompany, hot: c.needsCompany > 0 } : null },
+  { href: "/suppliers", label: "OPS suppliers", icon: Truck, route: "directory", badge: (c) => c ? { value: c.suppliers, hot: false } : null },
+  { href: "/dept-emails", label: "Dept. emails", icon: Contact, route: "directory", badge: (c) => c ? { value: c.deptEmails, hot: false } : null },
+  { href: "/import", label: "Import", icon: FileSpreadsheet, route: "import", badge: none },
+  { href: "/accounts", label: "Accounts", icon: UsersRound, route: "accounts", badge: none },
 ];
 
 const COLLAPSE_KEY = "directory.sidebar.collapsed";
@@ -53,7 +59,8 @@ function SidebarContent({ tip, collapsed, showCollapse, onNavigate, onLogout }: 
   const theme = useTheme();
   const pathname = usePathname();
   const { data: me } = useQuery(meQuery);
-  const { data: counts } = useQuery(countsQuery);
+  const { data: counts } = useQuery({ ...countsQuery, enabled: !!me?.routes.includes("directory") });
+  const nav = NAV.filter((n) => me?.routes.includes(n.route));
   const name = me?.name ?? "Account";
   return (
     <div className="flex h-full flex-col text-sidebar-foreground">
@@ -64,11 +71,13 @@ function SidebarContent({ tip, collapsed, showCollapse, onNavigate, onLogout }: 
         <span className="sb-label min-w-0 flex-1 truncate pr-2 text-[15px] font-bold tracking-tight whitespace-nowrap">Client Directory</span>
       </div>
       <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2 py-2">
-        {NAV.map(({ href, label, icon: Icon, badge }) => {
+        {nav.map(({ href, label, icon: Icon, badge }, i) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           const b = badge(counts);
           return (
             <Tooltip key={href} disabled={!tip}>
+              {/* Import and Accounts sit apart from the directory pages. */}
+              {i > 0 && badge === none && nav[i - 1].badge !== none && <span aria-hidden className="mt-3" />}
               <TooltipTrigger render={
                 <Link href={href} onClick={onNavigate} aria-current={active ? "page" : undefined}
                   className={cn(ROW, active ? "bg-sidebar-accent text-sidebar-accent-foreground" : IDLE)} />
@@ -114,7 +123,7 @@ function SidebarContent({ tip, collapsed, showCollapse, onNavigate, onLogout }: 
               </span>
               <span className="sb-label min-w-0 flex-1 pr-2 leading-tight whitespace-nowrap">
                 <span className="block truncate text-sm font-semibold">{name}</span>
-                <span className="block truncate text-xs text-sidebar-foreground/70">{me ? `${me.role} · ${me.email}` : "Signed in"}</span>
+                <span className="block truncate text-xs text-sidebar-foreground/70">{me ? `${me.role.name} · ${me.email}` : "Signed in"}</span>
               </span>
             </MenuPrimitive.Trigger>
             <MenuPrimitive.Portal>
@@ -140,6 +149,20 @@ function SidebarContent({ tip, collapsed, showCollapse, onNavigate, onLogout }: 
       </div>
     </div>
   );
+}
+
+/** Renders the page only once the account's grants are known; a page outside them shows the no-access state. The API enforces the same grants. */
+function RouteGate({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const qc = useQueryClient();
+  const { data: me, isPending, isFetching } = useQuery(meQuery);
+  useEffect(() => { void qc.invalidateQueries({ queryKey: keys.me }); }, [qc, pathname]);
+  const route = routeFor(pathname);
+  if (!route) return children;
+  if (isPending) return null;
+  if (me?.routes.includes(route)) return children;
+  // Wait for the fresh grants before showing no-access, so a newly granted page never flashes it.
+  return isFetching ? null : <NoAccess />;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -194,7 +217,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Button size="icon" variant="ghost" aria-label="Open navigation" onClick={() => setDrawer(true)}><Menu className="size-5" /></Button>
           <span className="text-sm font-bold tracking-tight">Client Directory</span>
         </header>
-        <main className="flex-1 px-4 pt-4 pb-10 lg:px-10 lg:pt-8 [contain:inline-size]">{children}</main>
+        <main className="flex-1 px-4 pt-4 pb-10 lg:px-10 lg:pt-8 [contain:inline-size]"><RouteGate>{children}</RouteGate></main>
       </div>
       <ConfirmDialog open={confirm} onOpenChange={setConfirm} title="Sign out?" confirmLabel="Sign out" pendingLabel="Signing out…" pending={signingOut}
         description="You will need your email and password to sign back in." onConfirm={logout} />

@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, CircleCheck, FileSpreadsheet, TriangleAlert, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/shared/page-header";
 import { errorMessage, request } from "@/lib/api/http";
 import { keys } from "@/lib/api/queries";
 import type { ImportBuckets, ImportCommitResponse, ImportPreview, ImportPreviewResponse, ImportResult } from "@/lib/api-types";
@@ -25,23 +25,20 @@ const TABLES = [["companies", "Clients"], ["contacts", "Contacts"], ["probity", 
 
 type Step = { kind: "pick" } | { kind: "checking"; file: File } | { kind: "preview"; file: File; preview: ImportPreview } | { kind: "committing"; file: File; preview: ImportPreview } | { kind: "done"; result: ImportResult };
 
-export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function ImportView() {
   const [step, setStep] = useState<Step>({ kind: "pick" });
-  const busy = step.kind === "checking" || step.kind === "committing";
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (busy) return; onOpenChange(o); if (!o) setStep({ kind: "pick" }); }}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-2xl">
-        <DialogHeader className="px-5 pt-5 pb-3">
-          <DialogTitle className="text-lg font-bold">Import the clients workbook</DialogTitle>
-          <DialogDescription>Reads All Clients Database, Probity Clients, OPS Supplier and All Dept. Emails. You see a preview before anything is saved; re-importing only fills empty fields.</DialogDescription>
-        </DialogHeader>
-        <ImportBody step={step} setStep={setStep} onClose={() => { onOpenChange(false); setStep({ kind: "pick" }); }} />
-      </DialogContent>
-    </Dialog>
+    <div className="flex max-w-3xl flex-col gap-6">
+      <PageHeader title="Import"
+        description="Reads the four tabs of the clients workbook: All Clients Database, Probity Clients, OPS Supplier and All Dept. Emails. You see a preview before anything is saved; re-importing only fills empty fields, so edits made here win." />
+      <section aria-label="Workbook import" className="flex flex-col rounded-2xl bg-card pt-5">
+        <ImportBody step={step} setStep={setStep} />
+      </section>
+    </div>
   );
 }
 
-function ImportBody({ step, setStep, onClose }: { step: Step; setStep: (s: Step) => void; onClose: () => void }) {
+function ImportBody({ step, setStep }: { step: Step; setStep: (s: Step) => void }) {
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
@@ -137,12 +134,12 @@ function ImportBody({ step, setStep, onClose }: { step: Step; setStep: (s: Step)
           })}
         </div>
       </div>
-      <DialogFooter className="mx-0 mb-0 rounded-b-xl px-5 py-3">
-        {step.kind === "done" ? <Button onClick={onClose}>Done</Button> : <>
+      <div className="flex flex-wrap justify-end gap-2 rounded-b-2xl bg-sunk px-5 py-3 dark:bg-accent/40">
+        {step.kind === "done" ? <Button variant="secondary" onClick={() => setStep({ kind: "pick" })}>Import another file</Button> : <>
           <Button variant="ghost" disabled={committing} onClick={() => setStep({ kind: "pick" })}>Choose another file</Button>
           <Button disabled={committing} onClick={() => commit(step.file, step.preview)}>{committing ? "Saving…" : "Save import"}</Button>
         </>}
-      </DialogFooter>
+      </div>
     </>
   );
 }

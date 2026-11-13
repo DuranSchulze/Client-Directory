@@ -6,15 +6,19 @@ import { CircleAlert, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError, request } from "@/lib/api/http";
 import type { AuthResponse } from "@/lib/api-types";
+import type { RouteKey } from "@/lib/routes";
+import { homeFor, routeFor } from "@/lib/access";
 
-/** Only same-origin paths are followed after sign-in. */
-function safeNext(v: string | null) {
-  if (!v || !v.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(v)) return "/clients";
+/** Only same-origin paths the account's role can open are followed after sign-in; anything else goes to its home. */
+function safeNext(v: string | null, routes: RouteKey[]) {
+  const home = homeFor(routes);
+  if (!v || !v.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(v)) return home;
   try {
     const url = new URL(v, window.location.origin);
-    if (url.origin !== window.location.origin || url.pathname.startsWith("/login")) return "/clients";
-    return url.href;
-  } catch { return "/clients"; }
+    if (url.origin !== window.location.origin || url.pathname.startsWith("/login")) return home;
+    const need = routeFor(url.pathname);
+    return need && !routes.includes(need) ? home : url.href;
+  } catch { return home; }
 }
 
 export function LoginForm() {
@@ -30,9 +34,9 @@ export function LoginForm() {
     setPending(true);
     setError("");
     try {
-      await request<AuthResponse>("/api/auth/login", { json: { email, password } });
+      const { item } = await request<AuthResponse>("/api/auth/login", { json: { email, password } });
       try { new BroadcastChannel("directory-session").postMessage("in"); } catch { /* unsupported */ }
-      window.location.href = safeNext(requested);
+      window.location.href = safeNext(requested, item.routes);
     } catch (err) {
       setError(err instanceof ApiError && err.status === 429 ? "Too many attempts. Wait 15 minutes, then try again."
         : err instanceof ApiError && err.status === 401 ? "Email or password is wrong."
@@ -44,7 +48,7 @@ export function LoginForm() {
   return (
     <div className="w-full max-w-sm">
       <h1 className="text-2xl font-bold tracking-tight">Sign in</h1>
-      <p className="mt-1.5 text-sm text-muted-foreground">Use your Client Directory admin account.</p>
+      <p className="mt-1.5 text-sm text-muted-foreground">Use your Client Directory account.</p>
       <form onSubmit={submit} className="mt-8 flex flex-col gap-5" noValidate>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="email" className="text-xs font-semibold text-muted-foreground">Email</label>

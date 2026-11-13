@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Download, FileSpreadsheet, FileX2, Plus, SearchX, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { KpiCard } from "@/components/shared/kpi-card";
 import { DataTableCard, TableSearch, type Column, type Sort } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { EngagementPill, EntityTag, Pill, StageSteps, STAGE_LABEL } from "@/components/shared/pills";
-import { companiesQuery } from "@/lib/api/queries";
+import { companiesQuery, meQuery } from "@/lib/api/queries";
 import { errorMessage } from "@/lib/api/http";
 import type { CompanyListItem } from "@/lib/api-types";
 import { ENTITIES, STAGES } from "@/lib/enums";
@@ -18,7 +19,6 @@ import { useUrlFilters } from "@/lib/use-url-filters";
 import { cn } from "@/lib/utils";
 import { ClientSheet } from "./client-sheet";
 import { AddClientDialog } from "./add-client-dialog";
-import { ImportDialog } from "./import-dialog";
 
 type Status = "active" | "inactive" | "new" | "unset";
 const QUICK = [
@@ -44,7 +44,9 @@ export function ClientsView() {
   const { get, set } = useUrlFilters();
   const { data, isPending, isFetching, error, refetch } = useQuery(companiesQuery);
   const [adding, setAdding] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const router = useRouter();
+  const { data: me } = useQuery(meQuery);
+  const canImport = !!me?.routes.includes("import");
   const all = useMemo(() => data ?? [], [data]);
 
   const status = get("status") as Status | "";
@@ -117,7 +119,6 @@ export function ClientsView() {
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       <PageHeader title="Clients" description="The accounting master list. The Scraper reads these clients and contacts to tag Gmail."
         actions={<>
-          <Button variant="secondary" onClick={() => setImporting(true)}><FileSpreadsheet />Import Excel</Button>
           <Button variant="secondary" nativeButton={false} render={<a href="/api/companies/export" download />}><Download />Export CSV</Button>
           <Button onClick={() => setAdding(true)}><Plus />Add client</Button>
         </>} />
@@ -165,14 +166,14 @@ export function ClientsView() {
         search={<TableSearch slashFocus value={qInput} placeholder="Search name, alias, TIN, SEC no., contact, email" onChange={(v) => { setQInput(v); set({ q: v.trim() || null, page: null }); }} />}
         empty={filtering
           ? <EmptyState icon={SearchX} title="No clients match these filters." actionLabel="Clear filters" onAction={clearAll} />
-          : <EmptyState icon={FileSpreadsheet} title="No clients yet." description="Import the All Clients Database sheet, or add the first client by hand." actionLabel="Import Excel" onAction={() => setImporting(true)} />}
+          : <EmptyState icon={FileSpreadsheet} title="No clients yet." description={canImport ? "Import the clients workbook, or add the first client by hand." : "Add the first client by hand."}
+              actionLabel={canImport ? "Open Import" : "Add client"} onAction={() => canImport ? router.push("/import") : setAdding(true)} />}
       />
 
       <ClientSheet id={openId} onClose={() => set({ id: null })} />
       <AddClientDialog open={adding || get("new") === "1"} prefill={{ name: get("name") || undefined, email: get("email") || undefined, contactName: get("contact") || undefined }}
         onOpenChange={(o) => { setAdding(o); if (!o && get("new")) set({ new: null, name: null, email: null, contact: null }); }}
         onCreated={(id) => set({ id, new: null, name: null, email: null, contact: null })} />
-      <ImportDialog open={importing} onOpenChange={setImporting} />
     </div>
   );
 }
