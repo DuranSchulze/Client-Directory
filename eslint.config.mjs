@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local dual-agent workflow scripts (CommonJS, not app code).
+    ".codex/**",
   ]),
 ]);
 
