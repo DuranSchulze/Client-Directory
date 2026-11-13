@@ -6,7 +6,8 @@ import { directory_users_tb as users } from "@/db/schema/directory-users";
 import { ROUTES } from "@/lib/routes";
 import type { RoleInput } from "@/lib/api-types";
 
-const selection = { id: roles.id, name: roles.name, routes: roles.routes, locked: roles.locked, users: sql<number>`(SELECT count(*)::int FROM ${users} WHERE ${users.roleId} = ${roles.id})` };
+// Explicit qualifiers survive Drizzle's single-table SELECT projection and preserve the outer correlation.
+const selection = { id: roles.id, name: roles.name, routes: roles.routes, locked: roles.locked, users: sql<number>`(SELECT count(*)::int FROM ${users} WHERE "directory_users"."role_id" = "directory_roles"."id")` };
 export async function lockAccounts(ex: Executor = db) {
   await ex.execute(sql`LOCK TABLE directory_roles, directory_users IN SHARE ROW EXCLUSIVE MODE`);
 }

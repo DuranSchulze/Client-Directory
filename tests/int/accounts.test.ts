@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)("directory account persistence and lockout", () => {
   const addedUsers: number[] = [], addedRoles: number[] = [], suspendedOwners: number[] = [];
@@ -58,6 +58,27 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("directory account persistence a
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(results.find((r) => r.status === "rejected")).toMatchObject({ reason: { status: 400, message: "Cannot leave zero active Owner accounts" } });
     expect(await countActiveOwners(owner.id)).toBe(1);
+  }, 60000);
+  it("counts a role's account in list/detail queries and refuses DELETE with the specified 409", async () => {
+    const { a, owner, tag } = await setup();
+    const { createRole, createAccount } = await import("@/services/accounts.service");
+    const { listRoles, findRole, findOwnerRole } = await import("@/repositories/roles.repository");
+    const { findUserById } = await import("@/repositories/users.repository");
+    const role = await createRole(a.id, { name: `Counted ${tag}`, routes: ["import"] }); addedRoles.push(role.id);
+    const account = await createAccount(a.id, { name: "One account", email: `counted-${tag}@example.test`, password: "password", roleId: role.id }); addedUsers.push(account.id);
+    expect((await findRole(role.id))?.users).toBe(1);
+    expect((await listRoles()).find((r) => r.id === role.id)?.users).toBe(1);
+    // Suspended seeded Owners still belong to Owner and must count too.
+    expect((await findOwnerRole())?.users).toBe(owner.users + 2);
+    const guard = await import("@/lib/auth/guard");
+    const access = vi.spyOn(guard, "requireRouteAccess").mockResolvedValue(guard.sessionUser((await findUserById(a.id))!));
+    try {
+      const { DELETE } = await import("@/app/api/roles/[id]/route");
+      const response = await DELETE(new Request(`https://example.test/api/roles/${role.id}`, { method: "DELETE" }), { params: Promise.resolve({ id: String(role.id) }) });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: "Role is in use" });
+      expect(await findRole(role.id)).not.toBeNull();
+    } finally { access.mockRestore(); }
   }, 60000);
   it("denies an actor whose Accounts grant is removed while its request waits for the lock", async () => {
     const { a, manager, tag } = await setup();
