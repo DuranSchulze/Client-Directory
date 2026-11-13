@@ -10,7 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:int": "vitest run --config vitest.int.config.ts",
-    "db:push": "drizzle-kit push",
+    "db:push": "tsx scripts/db-apply.ts",
+    "db:apply": "tsx scripts/db-apply.ts --apply",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --conditions=react-server scripts/seed-admin.ts"
   },
