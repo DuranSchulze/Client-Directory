@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client Directory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Tokens copied from Scraper frontend globals.css (DESIGN.md "Metric Slate Gold"). */
+:root{color-scheme:dark;--background:#1a1f24;--foreground:#dee3ea;--card:#232930;--popover:#2d353e;--primary:#ffc513;--primary-foreground:#1a1f24;--primary-text:#ffc513;--secondary:#293138;--muted-foreground:#aeb8c4;--accent:#2d353e;--destructive:#ffb4ab;--border:#4b5663;--field:#151a1f;--ring:#ffc513;--sidebar:#12171c;--sidebar-border:#2d353e;--success:#6fd3a6;--warning:#ffc513;--info:#8db4ff;--radius:.5rem}
+html[data-theme=light]{color-scheme:light;--background:#f4f6f8;--foreground:#1a1f24;--card:#fff;--popover:#fff;--primary-text:#8a6500;--secondary:#eceff3;--muted-foreground:#5a6572;--accent:#e6eaef;--destructive:#c62828;--border:#dfe4ea;--field:#fff;--ring:#b58500;--sidebar:#fff;--sidebar-border:#dfe4ea;--success:#146c45;--warning:#8a5a00;--info:#1f55b8}
+*{box-sizing:border-box;margin:0}
+body{font-family:Manrope,system-ui,sans-serif;background:var(--background);color:var(--foreground);font-size:14px;line-height:1.5}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.app{display:flex;min-height:100vh}
+/* No rule lines anywhere: depth comes from tonal tiers (DESIGN.md "Elevation & Depth"). */
+:root{--lift:#2a3139;--sunk:#1e242a;--edge:#3d4651}
+html[data-theme=light]{--lift:#eef1f4;--sunk:#f7f8fa;--edge:#d3d9e0}
+/* Thin edge on KPI cards and the table card so they separate from the page (user request). */
+/* Sidebar */
+aside.sb{width:16rem;flex:none;background:var(--sidebar);padding:20px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 10px 24px;font-weight:700;font-size:16px;letter-spacing:-.01em}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--primary);color:var(--primary-foreground);display:grid;place-items:center;font-weight:700}
+.nav{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);color:var(--muted-foreground);font-weight:600;text-decoration:none;transition:background .15s,color .15s}
+.nav:hover{background:var(--lift);color:var(--foreground)}
+.nav.on{background:var(--accent);color:var(--foreground)}
+.nav.on .icon{color:var(--primary-text)}
+.nav .n{margin-left:auto;font-size:12px;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.sb-foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:var(--radius);background:var(--lift)}
+.av{width:32px;height:32px;border-radius:999px;background:var(--accent);display:grid;place-items:center;font-weight:700;font-size:12px;flex:none}
+/* Main */
+main{flex:1;min-width:0;padding:32px 40px}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:28px;flex-wrap:wrap}
+h1{font-size:32px;font-weight:700;line-height:1.2;letter-spacing:-.02em}
+.sub{color:var(--muted-foreground);margin-top:4px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--radius);font-weight:600;background:var(--accent);transition:background .15s,transform .1s}
+.btn:hover{background:var(--lift);filter:brightness(1.12)}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:var(--primary);color:var(--primary-foreground)}
+.icon{width:16px;height:16px;flex:none}
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi{position:relative;background:var(--card);border:1px solid var(--edge);border-radius:1rem;padding:18px 20px;text-align:left;transition:background .15s,transform .15s;overflow:hidden}
+.kpi:hover{background:var(--lift);transform:translateY(-2px)}
+.kpi.on{background:var(--accent);border-color:color-mix(in srgb,var(--primary) 55%,var(--edge))}
+.kpi.on:after{content:"";position:absolute;left:20px;right:20px;bottom:0;height:3px;border-radius:3px 3px 0 0;background:var(--primary)}
+.kpi .l{font-size:11px;color:var(--muted-foreground);font-weight:600;display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.12em}
+.kpi .v{font-size:36px;font-weight:700;letter-spacing:-.03em;margin-top:6px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:13px;font-weight:600;color:var(--muted-foreground);margin-top:4px}
+.kpi .d.warn{color:var(--warning)}.kpi .d.good{color:var(--success)}.kpi .d.bad{color:var(--destructive)}
+.dot{width:8px;height:8px;border-radius:99px;display:inline-block}
+/* Toolbar */
+.card{background:var(--card);border:1px solid var(--edge);border-radius:1rem;overflow:hidden}
+.bar{display:flex;gap:12px;padding:16px;flex-wrap:wrap;align-items:center}
+.search{position:relative;flex:1;min-width:220px}
+.search svg{position:absolute;left:12px;top:10px;color:var(--muted-foreground)}
+.in{height:36px;width:100%;background:var(--sunk);border:0;border-radius:var(--radius);padding:0 12px;transition:box-shadow .15s,background .15s}
+html:not([data-theme=light]) .in{background:var(--field)}
+.search .in{padding-left:36px}
+.in:hover{background:var(--lift)}
+.in:focus{outline:none;box-shadow:0 0 0 2px var(--primary)}
+select.in{width:auto;padding-right:28px}
+kbd{font:inherit;font-size:11px;background:var(--accent);border-radius:4px;padding:0 6px;color:var(--muted-foreground);position:absolute;right:10px;top:9px}
+.tabs{display:flex;gap:4px;padding:12px 16px 8px;overflow-x:auto}
+.tab{padding:6px 12px;font-weight:600;color:var(--muted-foreground);border-radius:999px;white-space:nowrap;transition:background .15s,color .15s}
+.tab:hover{color:var(--foreground);background:var(--lift)}
+.tab.on{color:var(--primary-foreground);background:var(--primary)}
+.tab .c{font-size:12px;opacity:.7;margin-left:6px;font-weight:600;font-variant-numeric:tabular-nums}
+/* Table */
+.tw{overflow-x:auto;padding:0 8px}
+table{width:100%;border-collapse:separate;border-spacing:0 2px;min-width:920px}
+/* Column headers: a stronger tonal tier than rows and foreground text; no rule line. Sorted column picks up a gold tint. */
+th{font-size:12px;color:var(--foreground);font-weight:700;letter-spacing:.02em;text-align:left;padding:11px 12px;white-space:nowrap;background:var(--accent)}
+html[data-theme=light] th{background:#e3e8ee}
+th[aria-sort=ascending],th[aria-sort=descending]{color:var(--primary-text);background:color-mix(in srgb,var(--primary) 12%,var(--accent))}
+html[data-theme=light] th[aria-sort=ascending],html[data-theme=light] th[aria-sort=descending]{background:color-mix(in srgb,var(--primary) 18%,#e3e8ee)}
+th:first-child{border-radius:var(--radius) 0 0 var(--radius)}th:last-child{border-radius:0 var(--radius) var(--radius) 0}
+th[data-k]{cursor:pointer}th[data-k]:hover{background:var(--lift);filter:brightness(1.12)}
+td{padding:12px;vertical-align:middle;transition:background .12s}
+td:last-child,#rows td:nth-child(3),#rows td:nth-child(6),#rows td:nth-child(7){white-space:nowrap}
+td:first-child{border-radius:var(--radius) 0 0 var(--radius)}td:last-child{border-radius:0 var(--radius) var(--radius) 0}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--lift)}
+tbody tr.sel td{background:color-mix(in srgb,var(--primary) 10%,var(--card))}
+tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--primary)}
+.who{display:flex;align-items:center;gap:12px}
+.who b{font-weight:600;display:block}
+.who b .warn .icon{width:14px;height:14px;vertical-align:-2px;margin-left:4px}
+.who>div:last-child{min-width:0}
+.who small{color:var(--muted-foreground)}
+.num{font-variant-numeric:tabular-nums;text-align:right}
+.mut{color:var(--muted-foreground)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap;background:var(--accent);color:var(--foreground)}
+.chip.active{color:var(--primary-text);background:color-mix(in srgb,var(--primary) 16%,transparent)}
+.chip.inquiry{color:var(--info);background:color-mix(in srgb,var(--info) 14%,transparent)}
+.chip.past{color:var(--muted-foreground)}
+.chip.lost{color:var(--destructive);background:color-mix(in srgb,var(--destructive) 14%,transparent)}
+.tag{display:inline-block;font-size:12px;background:var(--accent);border-radius:999px;padding:2px 9px;margin:0 4px 4px 0;white-space:nowrap}
+.steps{display:flex;gap:3px;align-items:center}
+.steps i{width:18px;height:6px;border-radius:3px;background:var(--accent)}
+.steps i.f{background:var(--primary)}
+.steps span{margin-left:8px;font-size:12px;color:var(--muted-foreground);text-transform:capitalize}
+.warn{color:var(--warning)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px 16px;color:var(--muted-foreground);font-size:12px}
+.empty{padding:48px;text-align:center;color:var(--muted-foreground)}
+/* Drawer */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,100vw);background:var(--card);box-shadow:0 0 20px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .22s cubic-bezier(.2,0,0,1);display:flex;flex-direction:column}
+.drawer.on{transform:none}
+.dh{padding:24px 24px 16px;display:flex;gap:16px;align-items:flex-start}
+.dh .av{width:48px;height:48px;font-size:16px;background:var(--primary);color:var(--primary-foreground)}
+.dh h2{font-size:24px;font-weight:700;line-height:1.3;letter-spacing:-.01em}
+.db{overflow-y:auto;padding:0 24px 32px;flex:1}
+.dtabs{display:flex;gap:4px;position:sticky;top:0;background:var(--card);margin:0 -24px 16px;padding:8px 24px;z-index:1}
+.sec{margin-bottom:12px;background:var(--accent);border-radius:12px;padding:16px}
+html[data-theme=light] .sec{background:var(--sunk)}
+.sec .tag{background:var(--card)}
+html[data-theme=light] .sec .tag{background:var(--accent)}
+.sec h3{font-size:13px;color:var(--muted-foreground);font-weight:600;margin-bottom:12px}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:8px 16px}
+.kv dt{color:var(--muted-foreground)}
+.kv dd a{color:var(--primary-text);text-decoration:none;background:linear-gradient(currentColor,currentColor) 0 100%/0 1px no-repeat;transition:background-size .2s}
+.kv dd a:hover{background-size:100% 1px}
+.alert{background:color-mix(in srgb,var(--warning) 14%,transparent);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;display:flex;gap:10px;font-size:13px;align-items:flex-start}
+.alert .icon{color:var(--warning);margin-top:2px}
+.pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.pipe div{padding:10px;border-radius:var(--radius);background:var(--card);font-size:12px}
+.pipe div.f{background:color-mix(in srgb,var(--primary) 22%,var(--card))}
+.pipe b{display:block;text-transform:capitalize;font-size:13px}
+.mini{width:100%;border-collapse:collapse;min-width:0}
+.mini td,.mini th{padding:6px 0;background:none}
+.mini tr.total td{padding-top:10px}
+.row{display:flex;justify-content:space-between;padding:6px 0}
+.tl{position:relative;padding-left:22px}
+.tl:before{content:"";position:absolute;left:5px;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent)}
+.tli{position:relative;margin-bottom:12px;background:var(--accent);border-radius:12px;padding:12px 14px}
+html[data-theme=light] .tli{background:var(--sunk)}
+.tli:before{content:"";position:absolute;left:-21px;top:16px;width:10px;height:10px;border-radius:99px;background:var(--muted-foreground)}
+.tli.paid:before,.tli.payment_confirmed:before{background:var(--primary)}
+.tli .h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted-foreground)}
+.tli p{margin-top:4px;color:var(--foreground);font-size:13px}
+.conf{font-size:11px;color:var(--muted-foreground);margin-left:6px;font-weight:500}
+.meta{font-size:12px;color:var(--muted-foreground);padding:4px 4px 0}
+.burger{display:none}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.clear{display:none}.clear.on{display:inline-flex}
+.title{display:flex;align-items:center;gap:12px}
+@media (max-width:860px){
+  aside.sb{position:fixed;z-index:6;transform:translateX(-100%)}
+  html.ready aside.sb{transition:transform .2s cubic-bezier(.2,0,0,1)}
+  aside.sb.on{transform:none}
+  .burger{display:inline-flex;height:36px;width:36px;justify-content:center;padding:0}
+  main{padding:16px}h1{font-size:24px}
+  .top{margin-bottom:16px}
+  .kpis{gap:8px;margin-bottom:16px}.kpi{padding:12px}.kpi .v{font-size:24px}.kpi .d{display:none}
+  kbd{display:none}
+  /* Phone: keep client, status, value; the drawer holds the rest. */
+  table{min-width:0}
+  #listView th:nth-child(1),#listView td:nth-child(1),#listView th:nth-child(n+4),#listView td:nth-child(n+4){display:none}
+  td,th{padding:12px 10px}
+  td:first-child{max-width:190px}
+  .who small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .who .av{display:none}
+  .foot span:last-child{display:none}
+  .dh,.db{padding-left:16px;padding-right:16px}.dtabs{margin:0 -16px 20px;padding:0 16px}
+  .kv{grid-template-columns:100px 1fr}
+}
+/* Forms, editing, toasts */
+.btn.ghost{background:none}.btn.ghost:hover{background:var(--lift)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.btn.danger{color:var(--destructive)}
+.btn[disabled]{opacity:.5;pointer-events:none}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form .full{grid-column:1/-1}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:4px}
+.field .in,.field textarea{width:100%}
+textarea.in{height:auto;min-height:72px;padding:8px 12px;resize:vertical;font:inherit}
+.field .hint{font-size:12px;color:var(--muted-foreground);margin-top:4px}
+.field .err{font-size:12px;color:var(--destructive);margin-top:4px}
+.field.bad .in{box-shadow:0 0 0 2px var(--destructive)}
+.sec-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sec-h h3{margin:0}
+.contact{background:var(--card);border-radius:10px;padding:12px;margin-bottom:8px}
+html[data-theme=light] .contact{background:#fff}
+.contact .top2{display:flex;align-items:flex-start;gap:10px}
+.contact .top2>div:not(.av){flex:1;min-width:0}
+.contact .top2>div.acts{display:flex;gap:4px;flex:none}
+.role{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent);color:var(--muted-foreground)}
+.role.main{background:color-mix(in srgb,var(--primary) 16%,transparent);color:var(--primary-text)}
+.src{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-foreground)}
+.src i{width:6px;height:6px;border-radius:99px;background:var(--info);display:inline-block}
+.src.man i{background:var(--primary)}
+.qrow{display:flex;gap:12px;align-items:center;padding:12px;border-radius:10px;background:var(--card);margin-bottom:8px}
+html[data-theme=light] .qrow{background:#fff}
+.qrow>div:not(.av){flex:1;min-width:0}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--popover);color:var(--foreground);padding:10px 16px;border-radius:10px;box-shadow:0 8px 20px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;font-weight:600;z-index:20}
+html[data-theme=light] .toast{background:#1a1f24;color:#fff}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.quick{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* Filters float on the page (no card): a segmented status control, then one row of pill controls. */
+/* Filters: one tonal panel (no outline), two labelled layers. KPI cards own the status filter. */
+.filters{background:var(--sunk);border-radius:1rem;padding:6px 16px;margin-bottom:16px}
+html:not([data-theme=light]) .filters{background:#1e242a}
+.frow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0}
+.frow+.frow{padding-top:4px}
+.flabel{width:120px;flex:none;font-size:12px;font-weight:600;color:var(--muted-foreground)}
+.frow select.in{width:auto;height:32px;border-radius:8px;background:var(--card)!important;padding:0 30px 0 12px;font-size:13px}
+.frow select.in:hover{background:var(--lift)!important}
+.frow .clear{margin-left:auto;height:32px}
+.quick{gap:4px}
+.frow .qc{height:30px;padding:0 10px;background:transparent!important;font-weight:600;color:var(--muted-foreground)}
+.frow .qc:hover{background:var(--lift)!important;color:var(--foreground)}
+.frow .qc b{font-weight:600;font-size:12px;padding:0 6px;border-radius:999px;background:var(--accent)}
+.frow .qc.on{background:color-mix(in srgb,var(--primary) 16%,transparent)!important;color:var(--primary-text);box-shadow:none}
+.frow .qc.on b{background:transparent}
+.ttitle{font-size:15px;font-weight:600;color:var(--muted-foreground)}
+.tcount{font-size:14px;font-weight:700;color:var(--primary-text);margin-right:auto;font-variant-numeric:tabular-nums}
+.bar .search{flex:0 1 260px}.bar .search .in{height:32px}.bar .search svg{top:8px}.bar kbd{top:7px}
+/* Data-table card details */
+th.rn,td.rn{width:36px;text-align:right;color:var(--muted-foreground);font-variant-numeric:tabular-nums;padding-right:4px}
+th[data-k]:after{content:"\2195";margin-left:6px;opacity:.35;font-size:11px}
+th[aria-sort=ascending]:after{content:"\2191";opacity:1;color:var(--primary-text)}
+th[aria-sort=descending]:after{content:"\2193";opacity:1;color:var(--primary-text)}
+.pager{display:flex;align-items:center;gap:8px}
+.pager select.in{height:30px;width:auto;padding:0 26px 0 10px;border-radius:8px}
+.pager .btn{height:30px}
+.bar .search{flex:0 1 420px}
+@media (max-width:860px){.flabel{width:100%}.frow select.in{flex:1 1 140px;min-width:0}.bar .search{flex:1 1 100%;min-width:0}}
+.quick>span{font-size:12px;font-weight:600;color:var(--muted-foreground);margin-right:4px}
+.qc{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;background:var(--sunk);font-size:13px;font-weight:600;color:var(--foreground);transition:background .15s,transform .1s}
+html:not([data-theme=light]) .qc{background:var(--field)}
+.qc:hover{background:var(--lift)}.qc:active{transform:translateY(1px)}
+.qc .icon{width:14px;height:14px;color:var(--muted-foreground)}
+.qc b{font-variant-numeric:tabular-nums;color:var(--muted-foreground);font-weight:600}
+.qc.on{background:color-mix(in srgb,var(--primary) 20%,var(--card));box-shadow:inset 0 0 0 1.5px var(--primary)}
+.qc.on .icon,.qc.on b{color:var(--primary-text)}
+.qc[disabled]{opacity:.45;pointer-events:none}
+.nav .n.hot{background:var(--primary);color:var(--primary-foreground);border-radius:99px;padding:0 7px;font-weight:700}
+@media (max-width:860px){.form{grid-template-columns:1fr}.qrow{flex-wrap:wrap}.qrow>div:not(.av){flex:1 1 calc(100% - 50px)}.qrow select.in{width:100%!important;flex:1 1 100%}.qrow .btn{flex:1;justify-content:center}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Excel-aligned additions */
+.ptag{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--info) 18%,transparent);color:var(--info);vertical-align:2px;margin-left:6px}
+.ent{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:6px;background:var(--accent);margin:0 4px 4px 0;letter-spacing:.02em}
+.newtag{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--info) 16%,transparent);color:var(--info);margin-left:6px;vertical-align:2px}
+.grp{font-size:12px;font-weight:700;color:var(--muted-foreground);margin:14px 0 8px}
+.grp:first-child{margin-top:0}
+.form .grp{grid-column:1/-1;margin:8px 0 0}
+.pgcard{padding:8px 8px 4px}
+.pgcard table{min-width:760px}
+.pgcard td:nth-child(4),.pgcard td:nth-child(5){white-space:nowrap}
+.okmark{color:var(--success);font-weight:700}
+.badmark{color:var(--destructive);font-weight:700}
+.dept{font-size:13px;font-weight:700;padding:18px 12px 6px!important}
+tbody tr.grprow:hover td{background:none}
+.lnk{color:var(--primary-text);text-decoration:none}.lnk:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sb" id="sb">
+  <div class="brand"><div class="logo">C</div>Client Directory</div>
+  <a class="nav on" href="#" data-view=""><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clients<span class="n" id="navCount"></span></a>
+  <a class="nav" href="#" data-view="probity"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Probity<span class="n" id="probCount"></span></a>
+  <a class="nav" href="#" data-view="link"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>Needs company<span class="n" id="linkCount"></span></a>
+  <a class="nav" href="#" data-view="suppliers"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>OPS suppliers<span class="n" id="supCount"></span></a>
+  <a class="nav" href="#" data-view="team"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>Dept. emails<span class="n" id="teamCount"></span></a>
+  <div class="sb-foot"><div class="av">AD</div><div><b style="font-weight:600">Admin</b><div class="mut" style="font-size:12px">admin role</div></div>
+    <button class="btn" style="margin-left:auto;height:32px;padding:0 8px" id="theme" aria-label="Toggle theme"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg></button></div>
+</aside>
+
+<main>
+  <div class="top">
+    <div>
+      <div class="title"><button class="btn burger" id="burger" aria-label="Open menu" aria-controls="sb"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><h1 id="pageTitle">Clients</h1></div>
+      <p class="sub" id="pageSub"></p>
+    </div>
+    <div style="display:flex;gap:8px" id="pageActions"></div>
+  </div>
+
+  <div id="listView">
+    <div class="kpis" id="kpis"></div>
+    <section class="filters" aria-label="Filters">
+      <div class="frow"><span class="flabel">Filter by</span>
+        <select class="in" id="fEnt" aria-label="Intercompany"></select>
+        <select class="in" id="fSvc" aria-label="Acctg service"></select>
+        <select class="in" id="fSup" aria-label="Supervisor"></select>
+        <select class="in" id="fStage" aria-label="Gmail stage"><option value="">Gmail stage</option><option value="inquiry">Inquiry</option><option value="quoted">Quoted</option><option value="invoiced">Invoiced</option><option value="paid">Paid</option><option value="none">No Gmail</option></select>
+        <button class="btn sm ghost clear" id="clear">Clear all</button>
+      </div>
+      <div class="frow"><span class="flabel">Needs attention</span><div class="quick" id="quick" role="group" aria-label="Needs attention"></div></div>
+    </section>
+    <div class="card">
+      <div class="bar"><span class="ttitle">Clients</span><b class="tcount" id="countLbl"></b>
+        <div class="search"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input class="in" id="q" placeholder="Search name, alias, TIN, contact, email…" aria-label="Search clients"><kbd>/</kbd></div>
+      </div>
+      <div class="tw"><table>
+        <thead><tr>
+          <th class="rn">#</th><th data-k="name">Registered name</th><th data-k="eng">Engagement</th><th data-k="stage">Gmail stage</th>
+          <th>Acctg service</th><th data-k="ent">Intercompany</th>
+          <th data-k="checked">Last checked</th><th data-k="last">Last contact</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      <div class="foot" id="pager"></div>
+    </div>
+  </div>
+
+  <div id="pageView" hidden></div>
+</main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<section class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dName"></section>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ===== Mock data =====
+ * Source of truth: Excel tab "All Clients  Database" -> companies (+ contacts split from the " / " packed cells).
+ * Cross-check: tab "Probity Clients" -> probity rows, matched to companies by email, then by name.
+ * Separate lists: "OPS Supplier" -> suppliers, "All Dept. Emails" -> internal staff mailboxes (never clients).
+ * Gmail: read-only scraper `candidates` (review_state='approved'), joined to companies on contact email.
+ * All names, emails and numbers below are made up. */
+const f=(value,confidence=1)=>({value,source:"gmail",confidence});
+const D=d=>d?new Date(d).toISOString():null;
+const cand=o=>({id:o.id,email_key:o.emails[0],review_state:"approved",reviewed_by:"admin@company.example",
+ reviewed:{name:f(o.name,.9),emails:f(o.emails),company:o.company?f(o.company,.8):undefined,stage:f(o.stage,.85),status:f(o.status,.7),
+ payments:f(o.payments||[]),amounts:f(o.amounts||[]),stage_dates:f(o.sd||{}),needs_check:f(o.checks||[]),
+ timeline:f({items:o.tl||[]}),first_contact:f(D(o.first)),last_contact:f(D(o.last))}});
+const candidates=[
+ cand({id:1,name:"Dev Patel",company:"Orbit Direct",emails:["dev@orbitdirect.example"],stage:"paid",status:"active",first:"2026-02-02",last:"2026-11-08",
+  amounts:[{stage:"invoiced",amount:38000,date:"2026-10-01"}],payments:[{date:"2026-10-05",amount:38000,basis:"Bank confirmation email"}],sd:{inquiry:"2026-02-02",invoiced:"2026-10-01",paid:"2026-10-05"},
+  tl:[{date:"2026-10-01",stage:"invoiced",mailbox:"billing@company.example",amounts:[{amount:38000}],snippet:"October retainer invoice attached."},{date:"2026-11-08",stage:"inquiry",mailbox:"accounting@company.example",snippet:"Can you send the updated 2307 for Q3?"}]}),
+ cand({id:2,name:"Kim Magno",company:"Riddle Rooms",emails:["kim@riddlerooms.example"],stage:"quoted",status:"inquiry",first:"2026-10-12",last:"2026-11-03",
+  amounts:[{stage:"quoted",amount:22000,date:"2026-10-15"}],sd:{inquiry:"2026-10-12",quoted:"2026-10-15"},checks:["Quote sent (2026-10-15) with no reply for 3 weeks."],
+  tl:[{date:"2026-10-15",stage:"quoted",mailbox:"accounting@company.example",amounts:[{amount:22000}],snippet:"Proposal for monthly bookkeeping and tax filing."}]}),
+ cand({id:3,name:"Melanie Ortiz",company:"Ledgerline Books",emails:["melanie@ledgerline.example"],stage:"invoiced",status:"active",first:"2026-06-01",last:"2026-10-29",
+  amounts:[{stage:"invoiced",amount:15000,date:"2026-10-20"}],sd:{inquiry:"2026-06-01",invoiced:"2026-10-20"},checks:["Client says they paid but attached no proof (2026-10-29)."],
+  tl:[{date:"2026-10-29",stage:"payment_claim",mailbox:"billing@company.example",snippet:"We settled the invoice yesterday."}]}),
+ cand({id:4,name:"Noel Ferrer",company:"Ace Card Club",emails:["compliance@acecardclub.example"],stage:"inquiry",status:"inquiry",first:"2026-11-01",last:"2026-11-10",sd:{inquiry:"2026-11-01"},
+  tl:[{date:"2026-11-01",stage:"inquiry",mailbox:"legal@company.example",snippet:"Following up on the probity requirements for our gaming license."}]}),
+ cand({id:5,name:"Grace Tan",emails:["gtan.events@gmail.com"],stage:"inquiry",status:"inquiry",first:"2026-11-06",last:"2026-11-09",sd:{inquiry:"2026-11-06"},
+  tl:[{date:"2026-11-06",stage:"inquiry",mailbox:"legal@company.example",snippet:"Do you handle LGU permits for a 2-day event in Makati?"}]}),
+ cand({id:6,name:"Jun Herrera",company:"Harbor Auto",emails:["jun@harborauto.example"],stage:"inquiry",status:"inquiry",first:"2026-11-07",last:"2026-11-10",sd:{inquiry:"2026-11-07"}}),
+ cand({id:7,name:"Paula Reyes",company:"Summit Leisure",emails:["paula@summitleisure.example"],stage:"inquiry",status:"inquiry",first:"2026-11-04",last:"2026-11-04",sd:{inquiry:"2026-11-04"}}),
+];
+
+let nextId=100;
+const ct=(name,designation,emails,phones,billing_role)=>({id:nextId++,name,designation,emails,phones,billing_role});
+const co=o=>({id:nextId++,alias:null,trade_name:null,type:"Non-individual",entities:[],tin:null,branch_code:null,rdo_code:null,zip:null,address:null,
+  engagement:null,is_new:false,acctg_service:null,supervisor:null,assistant:null,efps:null,year_end:null,sec_no:null,incorporated:null,
+  last_checked:null,remarks_billing:null,bank:null,account_no:null,account_name:null,atc:null,remarks_ap:null,gd_link:null,docs_checked:null,remarks_docs:null,
+  contacts:[],updated_at:D("2026-11-11"),created_by:"excel-import",...o});
+const companies=[
+ co({name:"ORBIT DIRECT INC.",alias:"Orbit (Ph)",entities:["FILEPINO"],tin:"502-285-451-000",branch_code:"00000",rdo_code:"050",zip:"1209",address:"Ayala Avenue, Makati",
+   engagement:"active",acctg_service:"TAX",supervisor:"Carla",assistant:"Arnel",efps:"eBIR",year_end:"2026-12-31",sec_no:"2020080001381-00",incorporated:"2020-08-14",
+   last_checked:"2026-11-02",gd_link:"#",docs_checked:"2026-04-03",
+   contacts:[ct("Dev Patel","Director",["dev@orbitdirect.example"],[],"main")]}),
+ co({name:"ORBIT DIRECT PTY LTD",alias:"Orbit (Foreign)",entities:["FILEPINO"],engagement:"active",last_checked:"2026-11-02",remarks_billing:"Foreign parent; no TIN.",
+   contacts:[ct("Dev Patel","Director",["dev.patel@orbitdirect-au.example"],[],"main")]}),
+ co({name:"RIDDLE ROOMS EVENT MANAGEMENT CORP.",alias:"Riddle Rooms",entities:["DDS","FILEPINO"],tin:"008-748-649-000",branch_code:"004",rdo_code:"043",zip:"1604",address:"Eastwood City, Quezon City",
+   engagement:"active",is_new:true,sec_no:"CS201406514",incorporated:"2014-03-28",last_checked:"2026-05-01",remarks_billing:"Can't locate the COR of main branch.",remarks_docs:"No updated COR; old COR has a different address.",
+   contacts:[ct("Kim Magno","Operations",["kim@riddlerooms.example"],[],"main"),ct("Errol Magno",null,["errol@riddlerooms.example"],[],"cc"),ct("Marge Chua",null,["marge@riddlerooms.example"],[],"cc")]}),
+ co({name:"LEDGERLINE BOOKS, INC.",alias:"Ledgerline",entities:["DDS","FILEPINO"],tin:"602-789-862-000",address:"Commerce and Industry Plaza, Taguig",engagement:"active",acctg_service:"Acctg & Tax",supervisor:"Win",
+   last_checked:"2026-11-02",remarks_billing:"TIN provided by client.",remarks_docs:"No COR in new or old GD.",
+   contacts:[ct("Melanie Ortiz","Finance",["melanie@ledgerline.example"],[],"main"),ct("Matt Cruz",null,["matt@ledgerline.example"],[],"cc")]}),
+ co({name:"3A AUTO ORIGINAL INC.",alias:"3A Auto",entities:["FILEPINO"],tin:"651-148-978-000",branch_code:"00000",rdo_code:"038",zip:"1115",address:"Quirino Highway, Quezon City",
+   engagement:"active",is_new:true,acctg_service:"Free Filing",supervisor:"Pat",efps:"eBIR",sec_no:"2024050150376-01",incorporated:"2024-05-13",last_checked:"2026-11-02",
+   contacts:[ct("Abby Palma",null,["abby.palma@gmail.com"],[],"main"),ct(null,null,["threeauto.ops@gmail.com"],[],"cc")]}),
+ co({name:"ACE CARD CLUB INC.",alias:"Ace Card Club",entities:["FILEPINO"],tin:"010-221-334-000",engagement:"active",is_new:true,last_checked:"2026-10-15",
+   contacts:[ct("Noel Ferrer","Compliance Officer",["compliance@acecardclub.example"],[],"main")]}),
+ co({name:"SUMMIT LEISURE CORP.",alias:"Summit Leisure",entities:["FILEPINO","AKASYA"],tin:"009-333-555-000",engagement:"active",last_checked:"2026-09-30",
+   contacts:[ct("Paula Reyes","Legal",["paula@summitleisure.example"],[],"main")]}),
+ co({name:"HARBOR AUTO SALES CORP.",alias:"Harbor Auto",entities:["DDS"],tin:"007-888-999-000",engagement:"inactive",last_checked:"2025-12-10",remarks_billing:"Stopped retainer Dec 2025.",
+   contacts:[ct("Tess Uy","Admin",["accounting@harborauto.example"],[],"main")]}),
+ co({name:"BLUE KEY HOLDINGS CORP.",alias:"Blue Key",entities:["MCADS UB"],tin:"006-555-444-000",engagement:"inactive",last_checked:"2025-08-01",
+   contacts:[ct("Henry Go","President",["henry@bluekey.example"],[],"main")]}),
+ co({name:"HOLLIS, LEA SILVA",alias:"Lea Hollis",type:"Individual",entities:["FILEPINO"],tin:"321-654-987-000",engagement:"active",acctg_service:"Tax",
+   contacts:[ct("Lea Silva Hollis",null,["lea.hollis@gmail.com"],[],"main")]}),
+ co({name:"NORTHWIND LOGISTICS INC.",alias:"Northwind",entities:["THS"],engagement:null,
+   contacts:[ct("James Uy","Operations Manager",["james.uy@northwind.example"],[],"main")]}),
+ co({name:"PEARL BAY PAYROLL SERVICES OPC",alias:"Pearl Bay",entities:["AKASYA"],tin:"009-709-926-000",engagement:"active",acctg_service:"Acctg & Tax",supervisor:"Carla",
+   bank:"Sample Bank",account_no:"001234567890",account_name:"PEARL BAY PAYROLL SERVICES OPC",atc:"WC158",remarks_ap:"Payroll partner.",
+   contacts:[ct("Mariell Jalos","Finance",["mariell@pearlbay.example"],[],"main")]}),
+];
+/* "Probity Clients" tab: kept as its own list, cross-checked against companies. */
+const probity=[
+ {id:1,company:"Ace Card Club Inc.",person:"Noel Ferrer",emails:["compliance@acecardclub.example"],service:"Probity",agreement:"#",drafted:"2026-01-20",ref:"F2026 - 022",remarks:null},
+ {id:2,company:"Summit Leisure Corp.",person:"Paula Reyes",emails:["paula@summitleisure.example"],service:"Probity",agreement:null,drafted:"2026-02-07",ref:"F2026 - 049",remarks:"Awaiting signed agreement"},
+ {id:3,company:"Riddle Rooms Event Management",person:"Kim Magno",emails:["kim@riddlerooms.example"],service:"Probity",agreement:"#",drafted:"2026-02-13",ref:"F2026 - 058",remarks:null},
+ {id:4,company:"Lucky Seven Gaming Corp.",person:"Mark Galvez",emails:["mark.lucky7@gmail.com"],service:"Probity",agreement:null,drafted:"2026-02-20",ref:"F2026 - 061",remarks:null},
+ {id:5,company:"Starline Digital Entertainment Inc.",person:null,emails:[],service:"Probity",agreement:null,drafted:null,ref:"F2026 - 064",remarks:"Contact pending"},
+];
+/* sensitive_reveals: append-only audit of account number reveals */
+const reveals=[];
+/* "OPS Supplier" tab */
+const suppliers=[
+ {id:1,name:"Bright Print Shop",particulars:"Invoices and printers",contact:"Ms. Luz Santos",email:"brightprint@gmail.com"},
+ {id:2,name:"SafeGuard Fire Equipment",particulars:"Fire extinguisher",contact:null,email:null},
+ {id:3,name:null,particulars:"Dry seal",contact:null,email:null},
+];
+/* "All Dept. Emails" tab: internal mailboxes, grouped by department. Excluded from clients and Gmail matching. */
+const team=[
+ {dept:"Accounting",name:null,title:"Shared mailbox",emails:["accounting@company.example"]},
+ {dept:"Accounting",name:null,title:"Shared mailbox",emails:["billing@company.example"]},
+ {dept:"Legal · Corporate team",name:"Atty. A. Reyes",title:"Managing Partner",emails:["areyes@company.example"]},
+ {dept:"Legal · Corporate team",name:"B. Santos",title:"Legal Assistant",emails:["legal.assistant1@company.example"]},
+ {dept:"Legal · Litigation team",name:"Atty. C. Lim",title:"Senior Associate Lawyer",emails:["clim@company.example"]},
+ {dept:"HR",name:"D. Cruz",title:"Director, HR & Administration",emails:["dcruz@company.example","hr@company.example"]},
+ {dept:"HR",name:"E. Ramos",title:"IT / Admin Specialist",emails:["it@company.example"]},
+];
+
+/* ===== Helpers ===== */
+const NOW=new Date("2026-11-12");
+const ENG={active:{l:"Active",c:"var(--primary)",d:"Engaged per the sheet"},inactive:{l:"Inactive",c:"var(--muted-foreground)",d:"No longer engaged"},
+  new:{l:"New",c:"var(--info)",d:"Flagged NEW in the sheet"},unset:{l:"Not set",c:"var(--destructive)",d:"Engagement status blank"}};
+const engOf=c=>c.engagement||"unset";
+const inTab=(c,t)=>t==="all"||(t==="new"?c.is_new:engOf(c)===t);
+const STAGES=["inquiry","quoted","invoiced","paid"];
+const ENTITIES=["FILEPINO","DDS","AKASYA","MCADS UB","THS"];
+const v=(r,k)=>r.reviewed[k]?.value;
+const peso=n=>n?"₱"+n.toLocaleString("en-PH"):"—";
+const fmt=d=>d?new Date(d).toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"}):"—";
+const ago=d=>{if(!d)return"";const n=Math.round((NOW-new Date(d))/864e5);return n<1?"today":n<30?n+"d ago":n<365?Math.round(n/30)+"mo ago":Math.round(n/365)+"y ago"};
+const ini=s=>(s||"?").replace(/\(.*?\)/g,"").split(/[\s,]+/).filter(w=>/^[\p{L}\d]/u.test(w)).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const FREE=new Set(["gmail.com","yahoo.com","outlook.com","hotmail.com","icloud.com","live.com"]);
+const dom=e=>e.split("@")[1]?.toLowerCase();
+const nkey=s=>(s||"").toLowerCase().replace(/\(.*?\)/g," ").replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(w=>w&&!["inc","corp","corporation","co","ltd","opc","pty","the","company"].includes(w)).join(" ");
+const mask=n=>n?"•••• "+n.slice(-4):"—";
+const ICON={
+ warn:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+ x:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+ edit:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+ trash:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>',
+ plus:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+ clock:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+ doc:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+ mail:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
+ shield:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+ dl:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
+};
+
+/* Gmail link on read: candidate -> company whose contact holds one of its emails. Internal dept. mailboxes never count. */
+const TEAM_EMAILS=new Set(team.flatMap(t=>t.emails));
+function linked(c){const em=new Set(c.contacts.flatMap(x=>x.emails.map(e=>e.toLowerCase())));return candidates.filter(k=>(v(k,"emails")||[]).some(e=>em.has(e.toLowerCase())))}
+function unlinked(){const em=new Set(companies.flatMap(c=>c.contacts.flatMap(x=>x.emails.map(e=>e.toLowerCase()))));return candidates.filter(k=>!(v(k,"emails")||[]).some(e=>em.has(e.toLowerCase())||TEAM_EMAILS.has(e)))}
+function suggest(k){const d=(v(k,"emails")||[]).map(dom).find(x=>x&&!FREE.has(x));if(!d)return null;return companies.find(c=>c.contacts.some(x=>x.emails.some(e=>dom(e)===d)))||null}
+/* Probity cross-check: match by any email, then by normalized name or alias. */
+function probityMatch(p){
+  const em=p.emails.map(e=>e.toLowerCase());
+  return companies.find(c=>c.contacts.some(x=>x.emails.some(e=>em.includes(e.toLowerCase()))))
+      || companies.find(c=>[c.name,c.alias,c.trade_name].some(n=>n&&nkey(n)&&nkey(n)===nkey(p.company)))||null;
+}
+const probityOf=c=>probity.filter(p=>probityMatch(p)===c);
+function roll(c){
+  const ks=linked(c);
+  const stage=ks.length?ks.map(k=>v(k,"stage")).sort((a,b)=>STAGES.indexOf(b)-STAGES.indexOf(a))[0]:null;
+  const pays=ks.flatMap(k=>v(k,"payments")||[]),amts=ks.flatMap(k=>v(k,"amounts")||[]).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  const last=ks.map(k=>v(k,"last_contact")).filter(Boolean).sort().pop()||null;
+  return {ks,stage,last,pays,amts,checks:ks.flatMap(k=>v(k,"needs_check")||[]),prob:probityOf(c)};
+}
+
+const FRESH=[["30","Within 30 days"],["90","31-90 days"],["old","Over 90 days"],["never","Never checked"]];
+const freshOf=c=>{if(!c.last_checked)return "never";const d=(NOW-new Date(c.last_checked))/864e5;return d<=30?"30":d<=90?"90":"old"};
+const pct=(n,t)=>t?Math.round(n*100/t):0;
+/* ===== Needs attention ===== */
+const QUICK=[
+ ["check","Needs check","warn",({r})=>r.checks.length>0],
+ ["recheck","Recheck 90d+","clock",({c})=>!c.last_checked||(NOW-new Date(c.last_checked))/864e5>=90],
+ ["notin","Missing TIN","doc",({c})=>!c.tin],
+ ["probity","Probity","shield",({r})=>r.prob.length>0],
+ ["nogmail","No Gmail yet","mail",({r})=>!r.ks.length],
+];
+
+/* ===== State ===== */
+const st={page:0,size:10,fresh:"",view:"",quick:"",tab:"all",q:"",ent:"",svc:"",sup:"",stage:"",sort:"name",dir:1,sel:null,dtab:"Company",editing:false,draft:null};
+const opts=(sel,label,vals,cur)=>{sel.innerHTML=`<option value="">${label}</option>`+vals.map(x=>`<option ${cur===x?"selected":""}>${esc(x)}</option>`).join("")};
+function fillFilters(){
+  opts(fEnt,"Intercompany",ENTITIES.filter(e=>companies.some(c=>c.entities.includes(e))),st.ent);
+  opts(fSvc,"Acctg service",[...new Set(companies.map(c=>c.acctg_service).filter(Boolean))].sort(),st.svc);
+  opts(fSup,"Supervisor",[...new Set(companies.map(c=>c.supervisor).filter(Boolean))].sort(),st.sup);
+}
+function filtered(ignoreTab,ignoreQuick){
+  const q=st.q.toLowerCase();
+  return companies.map(c=>({c,r:roll(c)})).filter(x=>{const {c,r}=x;
+    if(!ignoreTab&&!inTab(c,st.tab))return false;
+    if(st.ent&&!c.entities.includes(st.ent))return false;
+    if(st.svc&&c.acctg_service!==st.svc)return false;
+    if(st.sup&&c.supervisor!==st.sup)return false;
+    if(st.stage&&(st.stage==="none"?r.stage:r.stage!==st.stage))return false;
+    if(st.fresh&&freshOf(c)!==st.fresh)return false;
+    if(!ignoreQuick&&st.quick&&!QUICK.find(k=>k[0]===st.quick)[3](x))return false;
+    if(q){const hay=[c.name,c.alias,c.trade_name,c.tin,c.address,c.sec_no,...c.contacts.flatMap(x=>[x.name,...x.emails,...x.phones])].join(" ").toLowerCase();if(!hay.includes(q))return false}
+    return true});
+}
+
+/* ===== Page shell ===== */
+const PAGES={
+ "":{t:"Clients",s:"Source of truth: the All Clients Database sheet. Gmail activity is matched by contact email.",a:`<button class="btn" id="export">${ICON.dl}Export CSV</button><button class="btn pri" id="addCompany">${ICON.plus}Add client</button>`},
+ probity:{t:"Probity",s:"The Probity Clients list, cross-checked against All Clients. Matched rows are tagged Probity on the client.",a:`<button class="btn pri" id="addProbity">${ICON.plus}Add probity row</button>`},
+ link:{t:"Needs company",s:"Approved Gmail contacts whose email isn't on any client yet. Attach each one so its activity shows up.",a:""},
+ suppliers:{t:"OPS suppliers",s:"Suppliers and contractors used by Operations. Kept apart from clients.",a:`<button class="btn pri" id="addSupplier">${ICON.plus}Add supplier</button>`},
+ team:{t:"Dept. emails",s:"Internal staff and shared mailboxes by department. These are never clients and are ignored when matching Gmail.",a:""},
+};
+function render(){
+  const P=PAGES[st.view];
+  pageTitle.textContent=P.t;pageSub.textContent=P.s;pageActions.innerHTML=P.a;
+  listView.hidden=st.view!=="";pageView.hidden=st.view==="";
+  navCount.textContent=companies.length;
+  const unmatched=probity.filter(p=>!probityMatch(p)).length;
+  probCount.textContent=unmatched||probity.length;probCount.classList.toggle("hot",!!unmatched);probCount.title=unmatched?`${unmatched} not in All Clients`:"";
+  const un=unlinked().length;linkCount.textContent=un||"";linkCount.classList.toggle("hot",!!un);
+  supCount.textContent=suppliers.length;teamCount.textContent=team.length;
+  document.querySelectorAll("[data-view]").forEach(a=>a.classList.toggle("on",a.dataset.view===st.view));
+  if(st.view==="probity")return renderProbity();
+  if(st.view==="link")return renderLinks();
+  if(st.view==="suppliers")return renderSuppliers();
+  if(st.view==="team")return renderTeam();
+  renderList();
+}
+function renderList(){
+  const base=filtered(true);
+  const cnt=t=>base.filter(({c})=>inTab(c,t)).length;
+  const T=base.length,stale=base.filter(({c})=>["old","never"].includes(freshOf(c))).length;
+  const SUB={active:[`${pct(cnt("active"),T)}% of clients`,"good"],inactive:[`${pct(cnt("inactive"),T)}% of clients`,""],
+    new:[`${base.filter(({c})=>c.is_new&&engOf(c)==="active").length} already active`,""],unset:[cnt("unset")?"Status blank; backfill":"All set",cnt("unset")?"warn":"good"]};
+  kpis.innerHTML=Object.entries(ENG).map(([k,s])=>`<button class="kpi ${st.tab===k?"on":""}" data-tab="${k}" aria-pressed="${st.tab===k}"><div class="l"><span class="dot" style="background:${s.c}"></span>${s.l}</div><div class="v">${cnt(k)}</div><div class="d ${SUB[k][1]}">${SUB[k][0]}</div></button>`).join("");
+  const pool=filtered(false,true);
+  quick.innerHTML=QUICK.map(([k,l,ic,fn])=>{const n=pool.filter(fn).length;return `<button class="qc ${st.quick===k?"on":""}" data-quick="${k}" aria-pressed="${st.quick===k}" ${n||st.quick===k?"":"disabled"}>${ICON[ic]}${l}<b>${n}</b></button>`}).join("");
+  const key=({c,r})=>({name:c.name.toLowerCase(),eng:engOf(c),stage:STAGES.indexOf(r.stage),ent:c.entities.join(),checked:c.last_checked||"",last:r.last||""})[st.sort];
+  const all=filtered().sort((a,b)=>(key(a)>key(b)?1:key(a)<key(b)?-1:0)*st.dir);
+  const pages=Math.max(1,Math.ceil(all.length/st.size));if(st.page>=pages)st.page=pages-1;
+  const off=st.page*st.size,rows=all.slice(off,off+st.size);
+  document.querySelectorAll("th[data-k]").forEach(th=>th.setAttribute("aria-sort",th.dataset.k===st.sort?(st.dir>0?"ascending":"descending"):"none"));
+  rowsEl.innerHTML=rows.length?rows.map(({c,r},n)=>{const i=STAGES.indexOf(r.stage),main=c.contacts.find(x=>x.billing_role==="main")||c.contacts[0],e=engOf(c);
+    const stale=!c.last_checked||(NOW-new Date(c.last_checked))/864e5>=90;
+    return `<tr data-id="${c.id}" tabindex="0" class="${st.sel===c.id?"sel":""}">
+    <td class="rn">${off+n+1}</td><td><div class="who"><div class="av">${ini(c.alias||c.name)}</div><div><b>${esc(c.name)}${r.prob.length?`<span class="ptag" title="On the Probity Clients list">${ICON.shield.replace('class="icon"','class="icon" style="width:11px;height:11px"')}Probity</span>`:""}${r.checks.length?`<span class="warn" title="${r.checks.length} item(s) need checking" aria-label="Needs check">${ICON.warn}</span>`:""}</b><small>${esc(c.alias||"")}${c.alias&&main?" · ":""}${esc(main?(main.name||main.emails[0]):"")}${c.contacts.length>1?` +${c.contacts.length-1}`:""}</small></div></div></td>
+    <td><span class="chip ${e==="active"?"active":e==="inactive"?"past":"lost"}">${ENG[e].l}</span>${c.is_new?`<span class="newtag">NEW</span>`:""}</td>
+    <td>${r.stage?`<div class="steps">${STAGES.map((_,j)=>`<i class="${j<=i?"f":""}"></i>`).join("")}<span>${r.stage}</span></div>`:`<span class="mut">No Gmail yet</span>`}</td>
+    <td>${c.acctg_service?`<span class="tag">${esc(c.acctg_service)}</span>`:`<span class="mut">—</span>`}</td>
+    <td>${c.entities.map(x=>`<span class="ent">${esc(x)}</span>`).join("")||`<span class="mut">—</span>`}</td>
+    <td><div class="${stale?"warn":""}">${fmt(c.last_checked)}</div><small class="mut">${c.last_checked?ago(c.last_checked):"never"}</small></td>
+    <td><div>${fmt(r.last)}</div><small class="mut">${ago(r.last)}</small></td></tr>`}).join("")
+    :`<tr><td colspan="8" class="empty">No clients match these filters.<br><button class="btn sm" style="margin-top:10px" id="clear2">Clear filters</button></td></tr>`;
+  pager.innerHTML=`<span class="mut">Showing ${all.length?off+1:0} to ${off+rows.length} of ${all.length} clients</span><div class="pager"><label class="mut" for="psize">Rows</label><select class="in" id="psize">${[10,25,50,100].map(x=>`<option ${x===st.size?"selected":""}>${x}</option>`).join("")}</select><button class="btn sm" id="prev" ${st.page?"":"disabled"}>Prev</button><span class="mut" style="font-variant-numeric:tabular-nums">${st.page+1} / ${pages}</span><button class="btn sm" id="next" ${st.page<pages-1?"":"disabled"}>Next</button></div>`;
+  clear.classList.toggle("on",!!(st.q||st.ent||st.svc||st.sup||st.stage||st.fresh||st.quick||st.tab!=="all"));
+  fEnt.value=st.ent;fStage.value=st.stage;
+  countLbl.textContent=`${all.length} of ${companies.length}`;
+}
+const rowsEl=document.getElementById("rows");
+
+function renderProbity(){
+  pageView.innerHTML=`<div class="card pgcard"><div class="tw"><table>
+    <thead><tr><th>Company (as listed)</th><th>In All Clients</th><th>Contact</th><th>Reference</th><th>Drafted</th><th>Agreement</th><th>Remarks / status</th></tr></thead><tbody>
+    ${probity.map(p=>{const m=probityMatch(p);return `<tr ${m?`data-id="${m.id}" data-tabopen="Company"`:""} tabindex="0">
+      <td><b style="font-weight:600">${esc(p.company)}</b><br><small class="mut">${esc(p.service)}</small></td>
+      <td>${m?`<span class="okmark"><svg class="icon" style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-label="Matched"><path d="M20 6 9 17l-5-5"/></svg></span> ${esc(m.name)}`:`<span class="badmark">Not found</span><br><button class="btn sm" data-prob-add="${p.id}" style="margin-top:4px">${ICON.plus}Add as client</button>`}</td>
+      <td>${esc(p.person||"—")}<br><small class="mut">${esc(p.emails.join(", ")||"no email")}</small></td>
+      <td>${esc(p.ref||"—")}</td><td>${fmt(p.drafted)}</td>
+      <td>${p.agreement?`<a class="lnk" href="${p.agreement}">Signed copy</a>`:`<span class="warn">Missing</span>`}</td>
+      <td>${esc(p.remarks||"—")}</td></tr>`}).join("")}
+    </tbody></table></div><div class="foot"><span>${probity.filter(probityMatch).length} of ${probity.length} matched to a client by email or name</span><span>Matched rows open the client</span></div></div>`;
+}
+function renderLinks(){
+  const un=unlinked();
+  pageView.innerHTML=`<div class="card" style="padding:16px">${un.length?un.map(k=>{const s=suggest(k);
+    return `<div class="qrow"><div class="av">${ini(v(k,"name"))}</div><div><b style="font-weight:600">${esc(v(k,"name"))}</b> <span class="mut">· ${esc((v(k,"emails")||[]).join(", "))}</span>
+      <div class="mut" style="font-size:12px">${esc(v(k,"company")||"No company in Gmail")} · ${v(k,"stage")} · last ${fmt(v(k,"last_contact"))}${s?` · <span style="color:var(--primary-text)">same domain as ${esc(s.name)}</span>`:""}</div></div>
+      <select class="in" style="width:220px" data-attach="${k.id}" aria-label="Attach ${esc(v(k,"name"))} to client"><option value="">Attach to…</option>${companies.map(c=>`<option value="${c.id}" ${s&&s.id===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
+      <button class="btn sm pri" data-do-attach="${k.id}">Attach</button>
+      <button class="btn sm" data-new-from="${k.id}">New client</button></div>`}).join(""):`<div class="empty">Every approved Gmail contact belongs to a client.</div>`}</div>`;
+}
+function renderSuppliers(){
+  pageView.innerHTML=`<div class="card pgcard"><div class="tw"><table><thead><tr><th>Supplier / contractor</th><th>Particulars</th><th>Contact</th><th>Email</th></tr></thead><tbody>
+    ${suppliers.map(s=>`<tr><td><b style="font-weight:600">${esc(s.name||"Unnamed")}</b></td><td>${esc(s.particulars||"—")}</td><td>${esc(s.contact||"—")}</td><td>${s.email?`<a class="lnk" href="mailto:${esc(s.email)}">${esc(s.email)}</a>`:"—"}</td></tr>`).join("")}
+    </tbody></table></div><div class="foot"><span>${suppliers.length} suppliers</span><span></span></div></div>`;
+}
+function renderTeam(){
+  const depts=[...new Set(team.map(t=>t.dept))];
+  pageView.innerHTML=`<div class="card pgcard"><div class="tw"><table><thead><tr><th style="width:28%">Name</th><th style="width:32%">Title</th><th>Email addresses</th></tr></thead><tbody>
+    ${depts.map(d=>`<tr class="grprow"><td colspan="3" class="dept">${esc(d)}</td></tr>`+team.filter(t=>t.dept===d).map(t=>`<tr><td>${esc(t.name||"—")}</td><td class="mut">${esc(t.title||"—")}</td><td>${t.emails.map(e=>`<a class="lnk" href="mailto:${esc(e)}">${esc(e)}</a>`).join("<br>")}</td></tr>`).join("")).join("")}
+    </tbody></table></div><div class="foot"><span>${team.length} mailboxes</span><span></span></div></div>`;
+}
+/* ===== Drawer ===== */
+const field=(id,label,val,o={})=>`<div class="field ${o.full?"full":""}" id="f-${id}"><label for="i-${id}">${label}</label>${o.area?`<textarea class="in" id="i-${id}">${esc(val)}</textarea>`:o.opts?`<select class="in" id="i-${id}">${o.opts.map(([k,l])=>`<option value="${k}" ${String(val??"")===k?"selected":""}>${l}</option>`).join("")}</select>`:`<input class="in" id="i-${id}" ${o.type?`type="${o.type}"`:""} value="${esc(val)}" ${o.ph?`placeholder="${o.ph}"`:""}>`}${o.hint?`<div class="hint">${o.hint}</div>`:""}</div>`;
+function open(id,tab){st.sel=id;st.draft=null;st.dtab=tab||"Company";st.editing=false;render();drawRender();drawer.classList.add("on");scrim.classList.add("on");setTimeout(()=>document.getElementById("close")?.focus(),0)}
+function openNew(prefill={}){
+  st.draft=co({name:prefill.name||"",entities:[],created_by:"admin@company.example",contacts:prefill.contact?[prefill.contact]:[],_new:true,_probity:prefill.probity||null});
+  st.sel=null;st.dtab="Company";st.editing=true;drawRender();drawer.classList.add("on");scrim.classList.add("on");setTimeout(()=>document.getElementById("i-name")?.focus(),0)}
+function cur(){return st.draft||companies.find(c=>c.id===st.sel)}
+const kv=rows=>`<dl class="kv">${rows.map(([k,val])=>`<dt>${k}</dt><dd>${val||"—"}</dd>`).join("")}</dl>`;
+function drawRender(){
+  const c=cur();if(!c)return;const r=roll(c),isNew=!!c._new,e=engOf(c);
+  const tabsHtml=(isNew?["Company"]:["Company","Contacts","Activity","Record"]).map(t=>`<button class="tab ${st.dtab===t?"on":""}" data-dt="${t}">${t}${t==="Contacts"?` <span class="c">${c.contacts.length}</span>`:t==="Activity"&&r.ks.length?` <span class="c">${r.ks.length}</span>`:""}</button>`).join("");
+  let body="";
+  if(st.dtab==="Company"&&st.editing){
+    const yn=[["","—"],["eBIR","eBIR"],["eFPS","eFPS"],["VDS","VDS"]];
+    body=`<div class="sec"><div class="form">
+      <div class="grp">Identity</div>
+      ${field("name","Registered name *",c.name,{full:true,ph:"As on the COR"})}
+      ${field("alias","Alias",c.alias)}${field("trade","Trade name",c.trade_name)}
+      ${field("type","Type",c.type,{opts:[["Non-individual","Non-individual"],["Individual","Individual"]]})}
+      ${field("ents","Intercompany",c.entities.join(", "),{hint:"FILEPINO, DDS, AKASYA, MCADS UB, THS"})}
+      <div class="grp">Engagement</div>
+      ${field("eng","Engagement status",c.engagement,{opts:[["","Not set"],["active","Active"],["inactive","Inactive"]]})}
+      ${field("new","New client",c.is_new?"1":"",{opts:[["","No"],["1","Yes"]]})}
+      ${field("svc","Acctg service",c.acctg_service)}${field("efps","EFPS / eBIR",c.efps,{opts:yn})}
+      ${field("sup","Assigned supervisor",c.supervisor)}${field("asst","Assigned assistant",c.assistant)}
+      <div class="grp">BIR &amp; SEC</div>
+      ${field("tin","TIN",c.tin,{ph:"000-000-000-000"})}${field("branch","Branch code",c.branch_code)}
+      ${field("rdo","RDO code",c.rdo_code)}${field("zip","Zip code",c.zip)}
+      ${field("address","Registered address",c.address,{full:true})}
+      ${field("sec","SEC registration no.",c.sec_no)}${field("inc","Date of incorporation",c.incorporated,{type:"date"})}
+      ${field("ye","Year end",c.year_end,{type:"date"})}
+      <div class="grp">Billing check</div>
+      ${field("chk","Date last checked",c.last_checked,{type:"date"})}${field("rb","Remarks (billing)",c.remarks_billing,{full:true,area:true})}
+      <div class="grp">Documents</div>
+      ${field("gd","DDS GD link",c.gd_link,{full:true,ph:"https://drive.google.com/…"})}${field("rd","Remarks (docs)",c.remarks_docs,{full:true,area:true})}
+      ${isNew?`<div class="grp">Main billing contact</div>
+        ${field("cname","Contact name",c.contacts[0]?.name)}${field("cdes","Designation",c.contacts[0]?.designation)}
+        ${field("cemail","Email *",c.contacts[0]?.emails.join(", "),{hint:"Gmail activity links by this email"})}${field("cphone","Contact no.",c.contacts[0]?.phones.join(", "))}`:""}
+    </div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn ghost" id="cancelEdit">Cancel</button><button class="btn pri" id="saveCo">${isNew?"Create client":"Save changes"}</button></div></div>`;
+  }else if(st.dtab==="Company"){
+    body=`${r.checks.length?`<div style="margin-bottom:12px">${r.checks.map(x=>`<div class="alert">${ICON.warn}<span>${esc(x)}</span></div>`).join("")}</div>`:""}
+    ${r.prob.length?`<div class="sec"><div class="sec-h"><h3>Probity</h3><button class="btn sm ghost" data-view-go="probity">Open list</button></div>${r.prob.map(p=>kv([["Reference",esc(p.ref)],["Drafted",fmt(p.drafted)],["Agreement",p.agreement?`<a class="lnk" href="${p.agreement}">Signed copy</a>`:`<span class="warn">Missing</span>`],["Remarks",esc(p.remarks)]])).join("")}</div>`:""}
+    <div class="sec"><div class="sec-h"><h3>Client details</h3><button class="btn sm ghost" id="editCo">${ICON.edit}Edit</button></div>
+      <div class="grp">Identity</div>${kv([["Alias",esc(c.alias)],["Trade name",esc(c.trade_name)],["Type",esc(c.type)],["Intercompany",c.entities.map(x=>`<span class="ent">${esc(x)}</span>`).join("")]])}
+      <div class="grp">Engagement</div>${kv([["Status",`<span class="chip ${e==="active"?"active":e==="inactive"?"past":"lost"}">${ENG[e].l}</span>${c.is_new?`<span class="newtag">NEW</span>`:""}`],["Acctg service",esc(c.acctg_service)],["EFPS / eBIR",esc(c.efps)],["Supervisor",esc(c.supervisor)],["Assistant",esc(c.assistant)]])}
+      <div class="grp">BIR &amp; SEC</div>${kv([["TIN",esc(c.tin)+(c.branch_code?` <span class="mut">· branch ${esc(c.branch_code)}</span>`:"")],["RDO / Zip",[c.rdo_code,c.zip].filter(Boolean).map(esc).join(" · ")],["Address",esc(c.address)],["SEC reg. no.",esc(c.sec_no)],["Incorporated",fmt(c.incorporated)],["Year end",fmt(c.year_end)]])}
+      <div class="grp">Billing check</div>${kv([["Last checked",c.last_checked?`${fmt(c.last_checked)} <span class="mut">· ${ago(c.last_checked)}</span>`:"Never"],["Remarks",esc(c.remarks_billing)]])}
+      ${c.bank||c.atc?`<div class="grp">Payroll / AP</div>${kv([["Bank",esc(c.bank)],["Account no.",`<span id="acctNo">${mask(c.account_no)}</span> <button class="btn sm ghost" id="reveal" data-cid="${c.id}">Reveal</button>`],["Account name",esc(c.account_name)],["ATC",esc(c.atc)],["Remarks",esc(c.remarks_ap)]])}`:""}
+      <div class="grp">Documents</div>${kv([["DDS GD",c.gd_link?`<a class="lnk" href="${c.gd_link}">Open folder</a>`:""],["Last checked",fmt(c.docs_checked)],["Remarks",esc(c.remarks_docs)]])}
+    </div>`;
+  }else if(st.dtab==="Contacts"){
+    body=`<div class="sec"><div class="sec-h"><h3>Contacts</h3><button class="btn sm" id="addCt">${ICON.plus}Add contact</button></div><div id="ctForm"></div>
+      ${c.contacts.map(x=>{const seen=candidates.some(k=>(v(k,"emails")||[]).some(e=>x.emails.includes(e)));return `<div class="contact"><div class="top2"><div class="av">${ini(x.name||x.emails[0])}</div><div>
+        <b style="font-weight:600">${esc(x.name||"Unnamed")}</b> <span class="role ${x.billing_role}">${x.billing_role==="main"?"Main":x.billing_role==="cc"?"CC":"—"}</span>
+        ${x.designation?`<div class="mut" style="font-size:12px">${esc(x.designation)}</div>`:""}
+        <div style="margin-top:6px">${x.emails.map(e=>`<a class="lnk" href="mailto:${esc(e)}">${esc(e)}</a>`).join("<br>")}${x.phones.length?`<br><a class="lnk" href="tel:${esc(x.phones[0])}">${esc(x.phones.join(", "))}</a>`:""}</div>
+        <div class="src ${seen?"":"man"}" style="margin-top:6px"><i></i>${seen?"Seen in Gmail":"From the sheet"}</div></div>
+        <div class="acts">${x.billing_role!=="main"?`<button class="btn sm ghost" data-main="${x.id}">Make main</button>`:""}<button class="btn sm ghost danger" data-del="${x.id}" aria-label="Remove ${esc(x.name||x.emails[0])}">${ICON.trash}</button></div></div></div>`}).join("")||`<p class="mut">No contacts yet.</p>`}</div>`;
+  }else if(st.dtab==="Activity"){
+    const tl=r.ks.flatMap(k=>((v(k,"timeline")||{}).items||[]).map(t=>({...t,who:v(k,"name")}))).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    const sd={};r.ks.forEach(k=>Object.entries(v(k,"stage_dates")||{}).forEach(([s,d])=>{if(!sd[s]||d<sd[s])sd[s]=d}));
+    const si=STAGES.indexOf(r.stage);
+    body=r.ks.length?`<p class="mut" style="font-size:12px;margin-bottom:12px">From Gmail via the scraper. Read-only here; fix it in the scraper's review queue.</p>
+      ${r.checks.length?`<div style="margin-bottom:12px">${r.checks.map(x=>`<div class="alert">${ICON.warn}<span>${esc(x)}</span></div>`).join("")}</div>`:""}
+      <div class="sec"><h3>Engagement</h3><div class="pipe">${STAGES.map((x,j)=>`<div class="${j<=si?"f":""}"><b>${x}</b><span class="mut">${sd[x]?fmt(sd[x]):"—"}</span></div>`).join("")}</div></div>
+      <div class="sec"><h3>Quotes &amp; invoices</h3>${r.amts.length?`<table class="mini"><tbody>${r.amts.map(a=>`<tr><td style="text-transform:capitalize">${a.stage}</td><td class="mut">${fmt(a.date)}</td><td class="num">${peso(a.amount)}</td></tr>`).join("")}</tbody></table>`:`<p class="mut">None on record.</p>`}</div>
+      <div class="sec"><h3>Payments</h3>${r.pays.length?`<table class="mini"><tbody>${r.pays.map(p=>`<tr><td>${fmt(p.date)}</td><td class="mut">${esc(p.basis)}</td><td class="num">${peso(p.amount)}</td></tr>`).join("")}<tr class="total"><td colspan="2"><b>Total paid</b></td><td class="num"><b>${peso(r.pays.reduce((s,p)=>s+(p.amount||0),0))}</b></td></tr></tbody></table>`:`<p class="mut">No verified payments.</p>`}</div>
+      <div class="sec" style="background:none;padding:0"><h3 style="padding:0 4px">Timeline</h3>${tl.length?`<div class="tl">${tl.map(t=>`<div class="tli ${t.stage}"><div class="h"><b style="color:var(--foreground);text-transform:capitalize">${t.stage.replace(/_/g," ")}</b>${fmt(t.date)} · ${esc(t.who)} · ${esc(t.mailbox)}${t.amounts?.length?` · <span class="warn">${peso(t.amounts[0].amount)}</span>`:""}</div><p>${esc(t.snippet)}</p></div>`).join("")}</div>`:`<p class="mut" style="padding:0 4px">No staged messages.</p>`}</div>`
+      :`<div class="empty">No Gmail conversations match this client's contact emails yet.</div>`;
+  }else{
+    body=`<div class="sec"><h3>companies row</h3>${kv([["id",c.id],["created_by",esc(c.created_by)],["updated_at",fmt(c.updated_at)],["engagement",c.engagement||"null"]])}</div>
+      <div class="sec"><h3>Probity rows matched</h3>${r.prob.length?r.prob.map(p=>kv([["probity.id",p.id],["listed as",esc(p.company)],["matched by",p.emails.some(e=>c.contacts.some(x=>x.emails.includes(e)))?"email":"name"]])).join(""):`<p class="mut">None.</p>`}</div>
+      <div class="sec"><h3>Sensitive reveals</h3>${reveals.filter(x=>x.companyId===c.id).slice(-10).reverse().map(x=>kv([["account_no",`${esc(x.user)} · ${new Date(x.at).toLocaleString("en-PH")}`]])).join("")||`<p class="mut">None.</p>`}</div>
+      <div class="sec"><h3>Linked candidates (scraper)</h3>${r.ks.length?r.ks.map(k=>kv([["candidates.id",k.id],["email_key",esc(k.email_key)],["review_state",k.review_state]])).join(""):`<p class="mut">None.</p>`}</div>`;
+  }
+  drawer.innerHTML=`<div class="dh"><div class="av">${ini(c.alias||c.name)||"+"}</div>
+    <div style="flex:1;min-width:0"><h2 id="dName">${esc(c.name||"New client")}</h2>
+      <div class="mut">${isNew?"Fill in what you know; you can add more later.":`${esc(c.alias||c.type)} · ${c.contacts.length} contact${c.contacts.length===1?"":"s"}`}</div>
+      ${isNew?"":`<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><span class="chip ${e==="active"?"active":e==="inactive"?"past":"lost"}">${ENG[e].l}</span>${c.is_new?`<span class="newtag" style="margin:0">NEW</span>`:""}${r.prob.length?`<span class="ptag" style="margin:0">Probity</span>`:""}${c.entities.map(x=>`<span class="ent" style="margin:0">${esc(x)}</span>`).join("")}${r.ks.length?`<span class="chip">gmail</span>`:""}</div>`}</div>
+    <button class="btn" style="padding:0 10px" id="close" aria-label="Close">${ICON.x}</button></div>
+  <div class="db"><div class="dtabs">${tabsHtml}</div>${body}</div>`;
+}
+
+/* ===== Validation (mirrors BUILD.md server rules) ===== */
+const RX={tin:/^\d{3}-\d{3}-\d{3}-\d{3,5}$/,email:/^[^\s@]+@[^\s@]+\.[^\s@]+$/,url:/^(https?:\/\/|#)/};
+const list=s=>(s||"").split(/[,/]/).map(x=>x.trim()).filter(Boolean);
+const okPhone=p=>p.replace(/\D/g,"").length>=7;
+function setErr(id,msg){const el=document.getElementById("f-"+id);if(!el)return;el.classList.toggle("bad",!!msg);el.querySelector(".err")?.remove();if(msg)el.insertAdjacentHTML("beforeend",`<div class="err">${msg}</div>`)}
+const val=id=>document.getElementById("i-"+id)?.value.trim()??"";
+const ownerOf=(emails,skip)=>companies.find(x=>x!==skip&&x.contacts.some(k=>k.emails.some(e=>emails.includes(e))));
+function saveCompany(){
+  const c=cur(),isNew=!!c._new,errs={};
+  const name=val("name").replace(/\s+/g," "),tin=val("tin"),ents=list(val("ents")).map(x=>x.toUpperCase()),gd=val("gd");
+  if(!name)errs.name="Registered name is required.";
+  else if(companies.some(x=>x!==c&&nkey(x.name)===nkey(name)))errs.name="A client with this registered name already exists.";
+  if(tin&&!RX.tin.test(tin))errs.tin="Use the format 000-000-000-000.";
+  else if(tin&&companies.some(x=>x!==c&&x.tin===tin&&(x.branch_code||"")===(val("branch")||"")))errs.tin="Another client already has this TIN and branch code.";
+  if(ents.some(x=>!ENTITIES.includes(x)))errs.ents="Use FILEPINO, DDS, AKASYA, MCADS UB or THS.";
+  if(gd&&!RX.url.test(gd))errs.gd="Paste the full https:// link.";
+  let emails=[],phones=[];
+  if(isNew){emails=list(val("cemail")).map(e=>e.toLowerCase());phones=list(val("cphone"));
+    if(!emails.length)errs.cemail="Add at least one email so Gmail activity can link.";
+    else if(emails.some(e=>!RX.email.test(e)))errs.cemail="Check the email address.";
+    else{const o=ownerOf(emails,c);if(o)errs.cemail=`This email already belongs to ${esc(o.name)}`}
+    if(phones.some(p=>!okPhone(p)))errs.cphone="Check the contact number.";}
+  ["name","tin","ents","gd","cemail","cphone"].forEach(k=>setErr(k,errs[k]));
+  if(Object.keys(errs).length){document.querySelector(".field.bad .in")?.focus();return}
+  Object.assign(c,{name,alias:val("alias")||null,trade_name:val("trade")||null,type:val("type"),entities:ents,engagement:val("eng")||null,is_new:!!val("new"),
+    acctg_service:val("svc")||null,efps:val("efps")||null,supervisor:val("sup")||null,assistant:val("asst")||null,tin:tin||null,branch_code:val("branch")||null,
+    rdo_code:val("rdo")||null,zip:val("zip")||null,address:val("address")||null,sec_no:val("sec")||null,incorporated:val("inc")||null,year_end:val("ye")||null,
+    last_checked:val("chk")||null,remarks_billing:val("rb")||null,gd_link:gd||null,remarks_docs:val("rd")||null,updated_at:new Date().toISOString()});
+  if(isNew){c.contacts=[ct(val("cname")||null,val("cdes")||null,emails,phones,"main")];delete c._new;delete c._probity;companies.unshift(c);st.draft=null;st.sel=c.id;toast("Client created");}
+  else toast("Changes saved");
+  st.editing=false;fillFilters();render();drawRender();
+}
+function contactForm(){
+  ctForm.innerHTML=`<div class="contact"><div class="form">${field("nn","Name","")}${field("nd","Designation","")}${field("ne","Email *","",{hint:"Separate several with commas"})}${field("np","Contact no.","")}
+    ${field("nr","Billing","cc",{opts:[["main","Main"],["cc","CC"],["none","Not on billing"]]})}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn ghost sm" id="ctCancel">Cancel</button><button class="btn pri sm" id="ctSave">Add contact</button></div></div>`;
+  document.getElementById("i-ne").focus();
+}
+function saveContact(){
+  const c=cur(),emails=list(val("ne")).map(e=>e.toLowerCase()),phones=list(val("np")),errs={};
+  if(!emails.length)errs.ne="Email is required.";else if(emails.some(e=>!RX.email.test(e)))errs.ne="Check the email address.";
+  else{const o=ownerOf(emails);if(o)errs.ne=`This email already belongs to ${esc(o.name)}`}
+  if(phones.some(p=>!okPhone(p)))errs.np="Check the contact number.";
+  ["ne","np"].forEach(k=>setErr(k,errs[k]));if(Object.keys(errs).length)return;
+  const role=val("nr");if(role==="main")c.contacts.forEach(x=>{if(x.billing_role==="main")x.billing_role="cc"});
+  c.contacts.push(ct(val("nn")||null,val("nd")||null,emails,phones,role));toast("Contact added");render();drawRender();
+}
+function close(){drawer.classList.remove("on");scrim.classList.remove("on");const id=st.sel;st.sel=null;st.draft=null;st.editing=false;render();document.querySelector(`tr[data-id="${id}"]`)?.focus()}
+let tt;const toastEl=document.getElementById("toast");function toast(m){toastEl.textContent=m;toastEl.classList.add("on");clearTimeout(tt);tt=setTimeout(()=>toastEl.classList.remove("on"),2200)}
+
+/* ===== Events ===== */
+document.addEventListener("click",e=>{
+  const ch=e.target.closest("[data-chart]");if(ch){const k=ch.dataset.chart,v2=ch.dataset.val;st[k]=st[k]===v2?"":v2;st.page=0;render();return}
+  if(e.target.id==="prev"){st.page--;render();return}if(e.target.id==="next"){st.page++;render();return}
+  if(e.target.closest("[data-quick],[data-tab],th[data-k]"))st.page=0;
+  const qk=e.target.closest("[data-quick]");if(qk){st.quick=st.quick===qk.dataset.quick?"":qk.dataset.quick;render();return}
+  const t=e.target.closest("[data-tab]");if(t){st.tab=st.tab===t.dataset.tab&&t.classList.contains("kpi")?"all":t.dataset.tab;render();return}
+  const vw=e.target.closest("[data-view]");if(vw){e.preventDefault();st.view=vw.dataset.view;sb.classList.remove("on");render();return}
+  const vg=e.target.closest("[data-view-go]");if(vg){close();st.view=vg.dataset.viewGo;render();return}
+  const pa=e.target.closest("[data-prob-add]");if(pa){const p=probity.find(x=>x.id===+pa.dataset.probAdd);return openNew({name:p.company.toUpperCase(),probity:p,contact:p.emails.length?ct(p.person,null,p.emails,[],"main"):null})}
+  const tr=e.target.closest("tr[data-id]");if(tr){open(+tr.dataset.id,tr.dataset.tabopen);return}
+  const th=e.target.closest("th[data-k]");if(th){st.dir=st.sort===th.dataset.k?-st.dir:1;st.sort=th.dataset.k;render();return}
+  const dt=e.target.closest("[data-dt]");if(dt){st.dtab=dt.dataset.dt;st.editing=false;drawRender();return}
+  const id=e.target.closest("button")?.id;
+  if(id==="close"||e.target===scrim)return close();
+  if(id==="addCompany")return openNew();
+  if(id==="addProbity"||id==="addSupplier"||id==="export")return toast("Available in the real app");
+  if(id==="editCo"){st.editing=true;drawRender();document.getElementById("i-name").focus();return}
+  if(id==="cancelEdit"){if(cur()._new)return close();st.editing=false;drawRender();return}
+  if(id==="saveCo")return saveCompany();
+  if(id==="reveal"){const c=cur();reveals.push({companyId:c.id,user:"admin@company.example",at:new Date().toISOString()});const el=document.getElementById("acctNo");el.textContent=c.account_no;e.target.closest("button").disabled=true;toast("Reveal logged");
+    setTimeout(()=>{if(document.getElementById("acctNo")){document.getElementById("acctNo").textContent=mask(c.account_no);document.getElementById("reveal").disabled=false}},30000);return}
+  if(id==="addCt")return contactForm();
+  if(id==="ctCancel"){ctForm.innerHTML="";return}
+  if(id==="ctSave")return saveContact();
+  const mk=e.target.closest("[data-main]");if(mk){cur().contacts.forEach(x=>x.billing_role=x.id===+mk.dataset.main?"main":x.billing_role==="main"?"cc":x.billing_role);toast("Main contact changed");drawRender();return}
+  const del=e.target.closest("[data-del]");if(del){const c=cur(),x=c.contacts.find(k=>k.id===+del.dataset.del);if(!confirm(`Remove ${x.name||x.emails[0]} from ${c.name}? Gmail activity from this email will no longer show here.`))return;c.contacts=c.contacts.filter(k=>k!==x);toast("Contact removed");render();drawRender();return}
+  const at=e.target.closest("[data-do-attach]");if(at){const k=candidates.find(x=>x.id===+at.dataset.doAttach),sel=document.querySelector(`[data-attach="${k.id}"]`),c=companies.find(x=>x.id===+sel.value);if(!c){sel.focus();return toast("Pick a client first")}
+    c.contacts.push(ct(v(k,"name"),null,v(k,"emails"),[],"cc"));toast(`Attached to ${c.name}`);render();return}
+  const nf=e.target.closest("[data-new-from]");if(nf){const k=candidates.find(x=>x.id===+nf.dataset.newFrom);return openNew({name:(v(k,"company")||"").toUpperCase(),contact:ct(v(k,"name"),null,v(k,"emails"),[],"main")})}
+  if(id==="clear"||id==="clear2"){Object.assign(st,{page:0,fresh:"",tab:"all",q:"",ent:"",svc:"",sup:"",stage:"",quick:""});q.value=fStage.value="";fillFilters();render()}
+  if(sb.classList.contains("on")&&!e.target.closest("#sb,#burger"))sb.classList.remove("on");
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&drawer.classList.contains("on"))close();
+  if(e.key==="/"&&!e.target.matches("input,textarea,select")&&st.view===""){e.preventDefault();q.focus()}
+  if(e.key==="Enter"&&e.target.matches("tr[data-id]"))open(+e.target.dataset.id,e.target.dataset.tabopen);
+});
+q.oninput=()=>{st.q=q.value;st.page=0;render()};
+document.addEventListener("change",e=>{if(e.target.id==="psize"){st.size=+e.target.value;st.page=0;render()}});
+fEnt.onchange=()=>{st.ent=fEnt.value;st.page=0;render()};fSvc.onchange=()=>{st.svc=fSvc.value;st.page=0;render()};fSup.onchange=()=>{st.sup=fSup.value;st.page=0;render()};fStage.onchange=()=>{st.stage=fStage.value;st.page=0;render()};
+theme.onclick=()=>{const h=document.documentElement;h.dataset.theme=h.dataset.theme==="light"?"dark":"light"};
+burger.onclick=()=>sb.classList.toggle("on");
+fillFilters();render();
+requestAnimationFrame(()=>document.documentElement.classList.add("ready"));
+</script>
+</body>
+</html>
