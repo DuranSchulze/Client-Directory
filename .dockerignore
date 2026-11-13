@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.codex
+.agents
+.aws
+.env*
+!.env.example
+graphify-out
+mock
+*.tsbuildinfo
