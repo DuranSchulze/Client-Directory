@@ -1,0 +1,64 @@
+import type { BillingRole, CompanyType, Engagement, Entity, MatchedBy, Stage } from "./enums";
+import type { CandidateFields, Payment, StageAmount, TimelineItem } from "./candidate-types";
+
+export const COMPANY_TEXT_FIELDS = ["alias", "tradeName", "acctgService", "supervisor", "assistant", "tin", "branchCode", "rdoCode", "zip", "address", "siEmail", "siAddress", "secNo", "boaClass", "bookletClass", "ptuLooseleaf", "orusRegistered", "remarksBilling", "payrollClient", "bank", "accountName", "atc", "classification", "remarksAp", "gdLink", "remarksDocs"] as const;
+export const COMPANY_DATE_FIELDS = ["incorporatedOn", "registeredOn", "yearEnd", "ptuIssuedOn", "lastCheckedBilling", "lastCheckedAp", "lastCheckedDocs"] as const;
+export type CompanyValues = Record<(typeof COMPANY_TEXT_FIELDS)[number] | (typeof COMPANY_DATE_FIELDS)[number], string | null> & {
+  name: string; type: CompanyType; entities: Entity[]; engagement: Engagement | null; isNew: boolean; efps: "eBIR" | "eFPS" | "VDS" | null;
+};
+export type CompanyInput = Partial<CompanyValues> & { name: string; accountNo?: string | null };
+export type CompanyPatch = Partial<CompanyInput>;
+export type ContactInput = { name?: string | null; designation?: string | null; emails: string[]; phones?: string[]; billingRole?: BillingRole };
+export type ContactPatch = Partial<ContactInput>;
+export type CreateCompanyBody = CompanyInput & { contacts: ContactInput[] };
+export type CompanyItem = CompanyValues & { id: number; nameKey: string; accountNoLast4: string | null; createdBy: string | null; createdAt: string; updatedAt: string };
+export type ContactItem = { id: number; companyId: number; name: string | null; designation: string | null; emails: string[]; phones: string[]; billingRole: BillingRole; updatedAt: string };
+export type GmailRollup = { stage: Stage | null; lastContact: string | null; needsCheck: string[]; candidateIds: number[] };
+export type CompanyListItem = CompanyItem & { contacts: ContactItem[]; gmail: GmailRollup; probity: boolean };
+export type CandidateItem = { id: number; fields: CandidateFields };
+export type Activity = {
+  candidates: CandidateItem[]; stage: Stage | null; stageDates: Partial<Record<Stage, string>>;
+  amounts: StageAmount[]; payments: Payment[]; timeline: { items: TimelineItem[]; truncated: boolean }; needsCheck: string[];
+};
+export type ProbityInput = {
+  companyListed: string; companyId?: number | null; contactPerson?: string | null; emails?: string[];
+  service?: string | null; agreementUrl?: string | null; draftedOn?: string | null; referenceNo?: string | null; remarks?: string | null;
+};
+export type ProbityPatch = Partial<ProbityInput>;
+export type ProbityItem = {
+  id: number; companyListed: string; companyId: number | null; matchedBy: MatchedBy | null; companyName: string | null;
+  contactPerson: string | null; emails: string[]; service: string | null; agreementUrl: string | null;
+  draftedOn: string | null; referenceNo: string | null; remarks: string | null; updatedAt: string;
+};
+export type SupplierInput = { name?: string | null; particulars?: string | null; contactName?: string | null; emails?: string[]; phones?: string[] };
+export type SupplierItem = Required<SupplierInput> & { id: number; updatedAt: string };
+export type DeptEmailInput = { department: string; name?: string | null; title?: string | null; emails?: string[]; sortOrder?: number };
+export type DeptEmailPatch = Partial<DeptEmailInput>;
+export type DeptEmailItem = Required<DeptEmailInput> & { id: number };
+export type CompanyDetail = {
+  company: CompanyItem; contacts: ContactItem[]; probity: ProbityItem[]; activity: Activity; reveals: { userEmail: string; at: string }[];
+};
+export type NeedsCompanyItem = CandidateItem & { suggestion: { companyId: number; name: string } | null };
+export type Counts = { companies: number; probity: number; probityUnmatched: number; needsCompany: number; suppliers: number; deptEmails: number };
+export type ApiError = { error: string; field?: string };
+export type ItemResponse<T> = { item: T };
+export type ListResponse<T> = { items: T[] };
+export type DeleteResponse = { ok: true };
+export type LoginBody = { email: string; password: string };
+export type SessionUser = { email: string; name: string; role: "admin" };
+export type AuthResponse = ItemResponse<SessionUser>;
+export type CompaniesResponse = ListResponse<CompanyListItem>;
+export type CompanyResponse = ItemResponse<CompanyItem>;
+export type CompanyDetailResponse = ItemResponse<CompanyDetail>;
+export type ContactResponse = ItemResponse<ContactItem>;
+export type ContactsResponse = ListResponse<ContactItem>;
+export type ProbityResponse = ListResponse<ProbityItem>;
+export type ProbityItemResponse = ItemResponse<ProbityItem>;
+export type SuppliersResponse = ListResponse<SupplierItem>;
+export type SupplierResponse = ItemResponse<SupplierItem>;
+export type DeptEmailsResponse = ListResponse<DeptEmailItem>;
+export type DeptEmailResponse = ItemResponse<DeptEmailItem>;
+export type NeedsCompanyResponse = ListResponse<NeedsCompanyItem>;
+export type AttachBody = { companyId: number };
+export type RevealAccountResponse = ItemResponse<{ accountNo: string | null }>;
+export type CountsResponse = ItemResponse<Counts>;
