@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hash } from "bcryptjs";
+import { ROUTES } from "@/lib/routes";
 
 const mocks = vi.hoisted(() => ({ findUserByEmail: vi.fn(), findUserById: vi.fn(), getSession: vi.fn() }));
 vi.mock("@/repositories/users.repository", () => mocks);
 vi.mock("@/lib/auth/get-session", () => ({ getSession: mocks.getSession }));
-const user = { id: 7, email: "admin@example.com", name: "Admin", role: "admin", active: true, passwordHash: "", createdAt: new Date() };
+const user = { id: 7, email: "admin@example.com", name: "Admin", roleId: 1, role: { id: 1, name: "Owner", locked: true, routes: [...ROUTES] }, active: true, passwordHash: "", createdAt: new Date() };
+const publicUser = { id: user.id, email: user.email, name: user.name, role: { id: 1, name: "Owner" }, routes: [...ROUTES] };
 let ip = 0;
 function request(path: string, body?: unknown) {
   return new Request(`https://directory.example/api/auth/${path}`, {
@@ -29,7 +31,7 @@ describe("auth routes", () => {
     const response = await POST(request("login", { email: " ADMIN@EXAMPLE.COM ", password: "correct-password" }));
     expect(response.status).toBe(200);
     expect(mocks.findUserByEmail).toHaveBeenCalledWith("admin@example.com");
-    expect(await response.json()).toEqual({ item: { email: user.email, name: user.name, role: "admin" } });
+    expect(await response.json()).toEqual({ item: publicUser });
     const cookie = response.headers.get("set-cookie")!;
     for (const value of ["directory_session=", "HttpOnly", "Secure", "SameSite=lax", "Max-Age=28800", "Path=/"]) expect(cookie).toContain(value);
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -89,20 +91,37 @@ describe("auth routes", () => {
     const { POST } = await import("@/app/api/auth/logout/route");
     mocks.getSession.mockResolvedValue(null);
     expect((await GET()).status).toBe(401);
-    expect((await POST(request("logout"))).status).toBe(401);
+    expect((await POST(request("logout"))).status).toBe(200);
     mocks.getSession.mockResolvedValue({ userId: user.id });
     mocks.findUserById.mockResolvedValue({ ...user, active: false });
     expect((await GET()).status).toBe(403);
-    expect((await POST(request("logout"))).status).toBe(403);
-    mocks.findUserById.mockResolvedValue({ ...user, role: "other" });
-    expect((await GET()).status).toBe(403);
+    expect((await POST(request("logout"))).status).toBe(200);
+    mocks.findUserById.mockResolvedValue({ ...user, role: { id: 2, name: "No grants", locked: false, routes: [] } });
+    expect((await GET()).status).toBe(200);
   });
   it("reads the public user and clears the session on logout", async () => {
     const { GET } = await import("@/app/api/auth/me/route");
     const { POST } = await import("@/app/api/auth/logout/route");
-    expect(await (await GET()).json()).toEqual({ item: { email: user.email, name: user.name, role: "admin" } });
+    expect(await (await GET()).json()).toEqual({ item: publicUser });
     const response = await POST(request("logout"));
     expect(await response.json()).toEqual({ ok: true });
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+  it.each(ROUTES)("checks the %s grant from the current role on every request", async (grant) => {
+    const { requireRouteAccess } = await import("@/lib/auth/guard");
+    mocks.findUserById.mockResolvedValue({ ...user, role: { id: 2, name: "Limited", locked: false, routes: [grant] } });
+    expect(await requireRouteAccess(grant)).toMatchObject({ role: { id: 2, name: "Limited" }, routes: [grant] });
+    for (const other of ROUTES.filter((r) => r !== grant)) await expect(requireRouteAccess(other)).rejects.toMatchObject({ status: 403, message: "You don't have access to this page" });
+    mocks.findUserById.mockResolvedValueOnce(null);
+    await expect(requireRouteAccess(grant)).rejects.toMatchObject({ status: 403 });
+  });
+  it.each([[], ["import"], ["accounts"]])("me permits an active account with grants %j and logout always clears its cookie", async (...grants) => {
+    const { GET } = await import("@/app/api/auth/me/route");
+    const { POST } = await import("@/app/api/auth/logout/route");
+    mocks.findUserById.mockResolvedValue({ ...user, role: { id: 2, name: "Limited", locked: false, routes: grants } });
+    expect((await (await GET()).json()).item.routes).toEqual(grants);
+    const response = await POST(request("logout"));
+    expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 });

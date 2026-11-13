@@ -7,16 +7,18 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("database transactions", () => {
     const { findUserByEmail, insertAdmin } = await import("@/repositories/users.repository");
     const { directory_users_tb } = await import("@/db/schema/directory-users");
     const { eq } = await import("drizzle-orm");
+    const { ensureOwnerRole } = await import("@/repositories/roles.repository");
+    const owner = await withTransaction((tx) => ensureOwnerRole(tx));
     const email = `${randomUUID()}@example.test`;
     const rolledBack = `${randomUUID()}@example.test`;
     try {
       await withTransaction(async (tx) => {
-        await insertAdmin({ email, name: "Transaction test", passwordHash: "not-a-login" }, tx);
+        await insertAdmin({ email, name: "Transaction test", passwordHash: "not-a-login", roleId: owner.id }, tx);
         expect(await findUserByEmail(email, tx)).not.toBeNull();
       });
       expect(await findUserByEmail(email)).not.toBeNull();
       await expect(withTransaction(async (tx) => {
-        await insertAdmin({ email: rolledBack, name: "Rollback test", passwordHash: "not-a-login" }, tx);
+        await insertAdmin({ email: rolledBack, name: "Rollback test", passwordHash: "not-a-login", roleId: owner.id }, tx);
         expect(await findUserByEmail(rolledBack, tx)).not.toBeNull();
         throw new Error("Injected rollback");
       })).rejects.toThrow("Injected rollback");

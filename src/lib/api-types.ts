@@ -1,5 +1,6 @@
 import type { BillingRole, CompanyType, Engagement, Entity, MatchedBy, Stage } from "./enums";
 import type { CandidateFields, Payment, StageAmount, TimelineItem } from "./candidate-types";
+import type { RouteKey } from "./routes";
 
 export const COMPANY_TEXT_FIELDS = ["alias", "tradeName", "acctgService", "supervisor", "assistant", "tin", "branchCode", "rdoCode", "zip", "address", "siEmail", "siAddress", "secNo", "boaClass", "bookletClass", "ptuLooseleaf", "orusRegistered", "remarksBilling", "payrollClient", "bank", "accountName", "atc", "classification", "remarksAp", "gdLink", "remarksDocs"] as const;
 export const COMPANY_DATE_FIELDS = ["incorporatedOn", "registeredOn", "yearEnd", "ptuIssuedOn", "lastCheckedBilling", "lastCheckedAp", "lastCheckedDocs"] as const;
@@ -45,7 +46,16 @@ export type ItemResponse<T> = { item: T };
 export type ListResponse<T> = { items: T[] };
 export type DeleteResponse = { ok: true };
 export type LoginBody = { email: string; password: string };
-export type SessionUser = { email: string; name: string; role: "admin" };
+export type SessionUser = { id: number; email: string; name: string; role: { id: number; name: string }; routes: RouteKey[] };
+export type Role = { id: number; name: string; routes: RouteKey[]; locked: boolean; users: number };
+export type Account = SessionUser & { active: boolean; createdAt: string };
+export type RoleInput = { name: string; routes: RouteKey[] };
+export type AccountInput = { name: string; email: string; password: string; roleId: number };
+export type AccountRoleInput = { roleId: number };
+export type RolesResponse = ListResponse<Role>;
+export type RoleResponse = ItemResponse<Role>;
+export type AccountsResponse = ListResponse<Account>;
+export type AccountResponse = ItemResponse<Account>;
 export type AuthResponse = ItemResponse<SessionUser>;
 export type CompaniesResponse = ListResponse<CompanyListItem>;
 export type CompanyResponse = ItemResponse<CompanyItem>;

@@ -5,7 +5,7 @@ import { importWorkbook } from "@/services/import.service";
 
 export const POST = handle(async (request: Request) => {
   await requireSession();
-  const user = await requireRouteAccess("directory");
+  const user = await requireRouteAccess("import");
   const { data, check } = await readUpload(request);
   return Response.json(await importWorkbook(data, check, user.email), { headers: { "Cache-Control": "no-store" } });
 });

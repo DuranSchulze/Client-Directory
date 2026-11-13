@@ -12,6 +12,7 @@
     "test:int": "vitest run --config vitest.int.config.ts",
     "db:push": "tsx scripts/db-apply.ts",
     "db:apply": "tsx scripts/db-apply.ts --apply",
+    "db:migrate-roles": "tsx scripts/migrate-roles.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --conditions=react-server scripts/seed-admin.ts"
   },

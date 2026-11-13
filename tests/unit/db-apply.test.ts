@@ -35,7 +35,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("closed SQL grammar", () => {
-  it("accepts the installed Drizzle export of the actual seven-table schema without database access", async () => {
+  it("accepts the installed Drizzle export of the actual eight-table schema without database access", async () => {
     const { execFileSync } = await vi.importActual<typeof import("node:child_process")>("node:child_process");
     const require = createRequire(import.meta.url);
     const sql = execFileSync(process.execPath, [resolve(dirname(require.resolve("drizzle-kit")), "bin.cjs"), "export"], { encoding: "utf8" });
@@ -43,6 +43,7 @@ describe("closed SQL grammar", () => {
     expect(declarations.filter((d) => d.kind === "table").map((d) => d.table).sort()).toEqual([...DIRECTORY_TABLES].sort());
     expect(declarations.some((d) => d.kind === "index")).toBe(true);
     expect(declarations.some((d) => d.kind === "constraint")).toBe(true);
+    expect(declarations.find((d) => d.name === "fk_directory_users_role")?.sql).toContain('"public"."directory_roles"');
   });
   it("parses quoted semicolons, escaped quotes and nested/line comments without splitting string data", () => {
     const sql = `-- heading;\nCREATE TABLE "suppliers" ("name" text DEFAULT 'a; b''s'); /* outer /* inner; */ end */`;
@@ -58,7 +59,7 @@ describe("closed SQL grammar", () => {
       + `CREATE INDEX idx_emails ON contacts USING gin (emails);`
       + `ALTER TABLE companies ADD CONSTRAINT uq_name UNIQUE (name);`;
     const parsed = validateBatch(batch(sql));
-    expect(parsed).toHaveLength(14);
+    expect(parsed).toHaveLength(DIRECTORY_TABLES.length + 7);
     expect(parsed.find((item) => item.columns.length === 4)?.sql).toContain('"public"."companies"');
     expect(parsed.find((item) => item.columns.length === 4)?.sql).toContain("pg_catalog.now ( )");
     expect(columns).toEqual([

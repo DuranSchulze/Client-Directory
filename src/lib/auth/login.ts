@@ -4,6 +4,7 @@ import { AppError } from "@/lib/errors";
 import { EMAIL_RE, normEmail } from "@/lib/normalize";
 import { findUserByEmail } from "@/repositories/users.repository";
 import { createSession } from "./session";
+import { sessionUser } from "./guard";
 
 const DUMMY_HASH = "$2b$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW";
 export async function login(body: unknown) {
@@ -16,5 +17,5 @@ export async function login(body: unknown) {
   const user = await findUserByEmail(normEmail(body.email));
   const matches = await compare(body.password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !matches || !user.active) throw new AppError(401, "Invalid email or password");
-  return { token: await createSession(user.id), item: { email: user.email, name: user.name, role: user.role } };
+  return { token: await createSession(user.id), item: sessionUser(user) };
 }

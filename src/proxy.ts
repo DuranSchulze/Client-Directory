@@ -3,7 +3,7 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === "/login" || pathname === "/api/auth/login") return NextResponse.next();
+  if (pathname === "/login" || pathname === "/api/auth/login" || pathname === "/api/auth/logout" && request.method === "POST") return NextResponse.next();
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (token && await verifySession(token)) return NextResponse.next();
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Sign in required" }, { status: 401 });

@@ -15,6 +15,9 @@ it("redirects pages with next, gates APIs and leaves login open", async () => {
   }
   expect((await proxy(new NextRequest("https://example.com/login"))).headers.get("x-middleware-next")).toBe("1");
   expect((await proxy(new NextRequest("https://example.com/api/auth/login", { method: "POST" }))).headers.get("x-middleware-next")).toBe("1");
+  for (const cookie of ["", "directory_session=revoked-token"]) {
+    expect((await proxy(new NextRequest("https://example.com/api/auth/logout", { method: "POST", headers: { cookie } }))).headers.get("x-middleware-next")).toBe("1");
+  }
   const { createSession } = await import("@/lib/auth/session");
   const response = await proxy(new NextRequest("https://example.com/clients", { headers: { cookie: `directory_session=${await createSession(7)}` } }));
   expect(response.headers.get("x-middleware-next")).toBe("1");
