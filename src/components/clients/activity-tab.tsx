@@ -6,6 +6,7 @@ import type { PaymentBasis } from "@/lib/candidate-types";
 import { STAGES } from "@/lib/enums";
 import { DASH, day, money } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { paymentTotals } from "@/lib/ui-helpers";
 import { Section } from "./client-sheet";
 
 // Same labels and tones as the Scraper's review badges (components/review/badges.tsx).
@@ -31,8 +32,7 @@ export function ActivityTab({ activity: a }: { activity: Activity }) {
       description="Approved Scraper conversations appear here when one of their emails is on this client's contacts." />;
   }
   const reached = a.stage ? STAGES.indexOf(a.stage) : -1;
-  const total = a.payments.reduce((s, p) => s + (p.amount ?? 0), 0);
-  const currency = a.payments.find((p) => p.currency)?.currency ?? "PHP";
+  const totals = paymentTotals(a.payments);
   return (
     <div>
       <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Lock aria-hidden className="size-3.5" />Read-only. Gmail data is reviewed and approved in the Scraper.</p>
@@ -79,7 +79,12 @@ export function ActivityTab({ activity: a }: { activity: Activity }) {
                   <td className="rounded-r-md py-1.5 pr-1 text-right font-semibold tabular-nums">{money(p)}</td>
                 </tr>
               ))}
-              <tr><td colSpan={2} className="pt-3 font-semibold">Total</td><td className="pt-3 pr-1 text-right font-bold tabular-nums">{money({ amount: total, currency })}</td></tr>
+              {totals.map((t, i) => (
+                <tr key={t.currency ?? "unknown"}>
+                  <td colSpan={2} className={cn("font-semibold", i === 0 && "pt-3")}>{totals.length > 1 ? `Total ${t.currency ?? "(currency unknown)"}` : "Total"}</td>
+                  <td className={cn("pr-1 text-right font-bold tabular-nums", i === 0 && "pt-3")}>{money({ amount: t.amount, currency: t.currency })}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}

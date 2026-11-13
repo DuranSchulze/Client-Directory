@@ -13,6 +13,7 @@ import { CompanyGroups, diffDraft, type CompanyDraft } from "./company-form";
 import { GROUPS, validateCompanyDraft, type FieldDef } from "./company-fields";
 import { Section } from "./client-sheet";
 import { toast } from "sonner";
+import { revealSecondsLeft } from "@/lib/ui-helpers";
 
 const toDraft = (c: CompanyItem): CompanyDraft => {
   const d: Record<string, unknown> = {};
@@ -49,10 +50,11 @@ export function CompanyTab({ detail, onDirty, onOpenContacts }: { detail: Compan
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const errs = validateCompanyDraft(draft);
+    // Only changed fields are checked: imported values the admin did not touch (an SI email list, say) never block an unrelated edit.
+    const body: Partial<CompanyValues> & { accountNo?: string } = diffDraft(c, draft);
+    const errs = validateCompanyDraft({ ...body, name: draft.name ?? "" });
     setErrors(errs);
     if (Object.keys(errs).length) { document.getElementById(`edit-${Object.keys(errs)[0]}`)?.focus(); return; }
-    const body: Partial<CompanyValues> & { accountNo?: string } = diffDraft(c, draft);
     if (accountNo.trim()) body.accountNo = accountNo.trim();
     if (!Object.keys(body).length) { setEditing(false); onDirty(false); return; }
     save.mutate(body);
@@ -127,22 +129,26 @@ const REVEAL_SECONDS = 30;
 
 function AccountRow({ companyId, last4 }: { companyId: number; last4: string | null }) {
   const [shown, setShown] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState(0);
   const [left, setLeft] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Timed from an absolute expiry, so a suspended or throttled tab still masks on time; hiding the page masks at once.
   useEffect(() => {
     if (!shown) return;
-    const t = setInterval(() => setLeft((s) => {
-      if (s <= 1) { setShown(null); return 0; }
-      return s - 1;
-    }), 1000);
-    return () => clearInterval(t);
-  }, [shown]);
+    const tick = () => {
+      const s = revealSecondsLeft(expiresAt);
+      if (s === 0 || document.visibilityState === "hidden") { setShown(null); setLeft(0); } else setLeft(s);
+    };
+    const t = setInterval(tick, 250);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", tick); };
+  }, [shown, expiresAt]);
 
   async function reveal() {
     setBusy(true);
     try {
       const r = await request<RevealAccountResponse>(`/api/companies/${companyId}/reveal-account`, { method: "POST" });
-      if (r.item.accountNo) { setShown(r.item.accountNo); setLeft(REVEAL_SECONDS); }
+      if (r.item.accountNo) { setExpiresAt(Date.now() + REVEAL_SECONDS * 1000); setShown(r.item.accountNo); setLeft(REVEAL_SECONDS); }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not reveal the account number.");
     } finally { setBusy(false); }

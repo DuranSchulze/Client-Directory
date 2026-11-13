@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from "luci
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ErrorState, Loadable, PlaceholderRows } from "./loadable";
+import { rowKeyActivates } from "@/lib/ui-helpers";
 
 export type Column<T> = {
   key: string;
@@ -45,9 +46,10 @@ export function DataTableCard<T>({
   const [sizeLocal, setSizeLocal] = useState(25);
   const sort = sortProp !== undefined ? sortProp : sortLocal;
   const size = sizeProp ?? sizeLocal;
-  const setSort = (s: Sort) => { (onSortChange ?? setSortLocal)(s); setPage(1); };
+  // A controlled parent resets its own page in the same update (one URL replace); two replaces would race and drop the first.
+  const setSort = (s: Sort) => { if (onSortChange) onSortChange(s); else { setSortLocal(s); setPageLocal(1); } };
   const setPage = (p: number) => (onPageChange ?? setPageLocal)(p);
-  const setSize = (s: number) => { (onSizeChange ?? setSizeLocal)(s); setPage(1); };
+  const setSize = (s: number) => { if (onSizeChange) onSizeChange(s); else { setSizeLocal(s); setPageLocal(1); } };
 
   const sorted = useMemo(() => {
     const col = sort && columns.find((c) => c.key === sort.key);
@@ -113,7 +115,7 @@ export function DataTableCard<T>({
                     ),
                     <tr key={getRowId(row)} tabIndex={onRowClick ? 0 : undefined} aria-label={onRowClick && rowLabel ? rowLabel(row) : undefined}
                       onClick={onRowClick ? () => onRowClick(row) : undefined}
-                      onKeyDown={onRowClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRowClick(row); } } : undefined}
+                      onKeyDown={onRowClick ? (e) => { if (rowKeyActivates(e)) { e.preventDefault(); onRowClick(row); } } : undefined}
                       className={cn("group/row", onRowClick && "cursor-pointer outline-none focus-visible:[&>td]:bg-lift", rowClassName?.(row))}>
                       {showRowNumbers && <td className="hidden rounded-l-lg py-3 pr-1 pl-3 text-right text-muted-foreground tabular-nums group-hover/row:bg-lift md:table-cell">{start + i + 1}</td>}
                       {columns.map((c, ci) => (
