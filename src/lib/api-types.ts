@@ -62,3 +62,4 @@ export type NeedsCompanyResponse = ListResponse<NeedsCompanyItem>;
 export type AttachBody = { companyId: number };
 export type RevealAccountResponse = ItemResponse<{ accountNo: string | null }>;
 export type CountsResponse = ItemResponse<Counts>;
+export type { ImportPreview, ImportResult, ImportIssue, ImportBuckets, ImportPreviewResponse, ImportCommitResponse } from "./import/contract";
