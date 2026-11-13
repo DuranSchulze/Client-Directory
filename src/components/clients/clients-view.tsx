@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Download, FileSpreadsheet, FileX2, Plus, SearchX, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { DataTableCard, TableSearch, type Column, type Sort } from "@/components/shared/data-table-card";
@@ -130,31 +131,24 @@ export function ClientsView() {
         <KpiCard label="Not set" value={kpi.unset.toLocaleString()} sub={kpi.unset ? "Status blank; backfill" : "All set"} tone={kpi.unset ? "warn" : "good"} loading={isPending} pressed={status === "unset"} onClick={() => toggleStatus("unset")} />
       </div>
 
-      <div className="flex flex-col rounded-2xl bg-sunk px-4 py-1.5">
-        <div className="flex flex-wrap items-center gap-2 py-2">
-          <span className="w-full shrink-0 text-xs font-semibold text-muted-foreground md:w-32">Filter by</span>
-          <FilterSelect label="Intercompany" value={f.ent} onChange={(v) => set({ ent: v, page: null })} options={ENTITIES.map((e) => ({ value: e, label: e }))} />
-          <FilterSelect label="Acctg service" value={f.svc} onChange={(v) => set({ svc: v, page: null })} options={services.map((s) => ({ value: s, label: s }))} />
-          <FilterSelect label="Supervisor" value={f.sup} onChange={(v) => set({ sup: v, page: null })} options={supervisors.map((s) => ({ value: s, label: s }))} />
-          <FilterSelect label="Gmail stage" value={f.stage} onChange={(v) => set({ stage: v, page: null })}
-            options={[...STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] })), { value: "none", label: "No Gmail" }]} />
-          {filtering && <Button variant="ghost" size="sm" className="ml-auto h-8" onClick={clearAll}><X />Clear all</Button>}
-        </div>
-        <div className="flex flex-wrap items-center gap-1 pt-1 pb-2">
-          <span className="w-full shrink-0 text-xs font-semibold text-muted-foreground md:w-32">Needs attention</span>
-          {QUICK.map(({ key, label, icon: Icon, test }) => {
-            const count = base.filter(test).length;
-            const on = f.quick === key;
-            return (
-              <button key={key} type="button" aria-pressed={on} disabled={!count && !on} onClick={() => set({ quick: on ? null : key, page: null })}
-                className={cn("inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px disabled:pointer-events-none disabled:opacity-45",
-                  on ? "bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] text-primary-text" : "text-muted-foreground hover:bg-lift hover:text-foreground")}>
-                <Icon aria-hidden className="size-3.5" />{label}
-                <span className={cn("rounded-full px-1.5 text-xs tabular-nums", !on && "bg-accent")}>{count}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div role="group" aria-label="Filters" className="flex flex-wrap items-center gap-2">
+        <Pick label="Intercompany" value={f.ent} onChange={(v) => set({ ent: v, page: null })} options={any("Any intercompany", ENTITIES)} />
+        <Pick label="Acctg service" value={f.svc} onChange={(v) => set({ svc: v, page: null })} options={any("Any service", services)} className="max-w-64" />
+        <Pick label="Supervisor" value={f.sup} onChange={(v) => set({ sup: v, page: null })} options={any("Any supervisor", supervisors)} className="max-w-64" />
+        <Pick label="Gmail stage" value={f.stage} onChange={(v) => set({ stage: v, page: null })}
+          options={[{ value: "", label: "Any stage" }, ...STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] })), { value: "none", label: "No Gmail" }]} />
+        {QUICK.map(({ key, label, icon: Icon, test }) => {
+          const count = base.filter(test).length;
+          const on = f.quick === key;
+          return (
+            <Button key={key} size="sm" variant="outline" aria-pressed={on} disabled={!count && !on} onClick={() => set({ quick: on ? null : key, page: null })}
+              className={cn("h-8 rounded-full bg-muted/40 font-normal", on && PILL_ON)}>
+              <Icon aria-hidden className="size-3.5" />{label}
+              <span className={cn("rounded-full px-1.5 text-xs tabular-nums", !on && "bg-accent")}>{count}</span>
+            </Button>
+          );
+        })}
+        {filtering && <Button variant="ghost" size="sm" className="h-8" onClick={clearAll}><X />Clear all</Button>}
       </div>
 
       <DataTableCard title="Clients" rows={rows} total={all.length} columns={columns} getRowId={(c) => c.id} itemLabel="clients"
@@ -178,12 +172,26 @@ export function ClientsView() {
   );
 }
 
-function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string | null) => void; options: { value: string; label: string }[] }) {
+// Same pill look as the Scraper Review filters (outline approved by the user for this row).
+const PILL = "h-8 w-auto min-w-32 rounded-full bg-muted/40 text-sm";
+const PILL_ON = "border-primary bg-primary/10 text-primary-text dark:border-primary dark:bg-primary/10";
+const ANY = "__any__";
+
+function any(label: string, values: readonly string[]) {
+  return [{ value: "", label }, ...values.map((v) => ({ value: v, label: v }))];
+}
+
+/** "" is the "Any ..." option, mapped to a sentinel for Base UI. */
+function Pick({ label, value, onChange, options, className }: { label: string; value: string; onChange: (v: string | null) => void; options: { value: string; label: string }[]; className?: string }) {
+  const items = options.map((o) => ({ value: o.value || ANY, label: o.label }));
   return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value || null)}
-      className={cn("field-select min-w-0 flex-1 basis-[9rem] md:flex-none md:basis-auto", value && "text-primary-text")}>
-      <option value="">{label}</option>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    <Select value={value || ANY} items={items} onValueChange={(v) => onChange(v === ANY || v == null ? null : String(v))}>
+      <SelectTrigger aria-label={label} className={cn(PILL, className, value && PILL_ON)}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent alignItemWithTrigger={false} align="start" className="w-max min-w-(--anchor-width) max-w-[min(30rem,calc(100vw-2rem))]">
+        {items.map((o) => <SelectItem key={o.value} value={o.value} className="*:break-words *:whitespace-normal">{o.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
   );
 }
