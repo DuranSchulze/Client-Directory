@@ -1,7 +1,7 @@
 import { withTransaction, type Tx } from "@/db";
 import { AppError } from "@/lib/errors";
 import { encryptAccountNo, decryptAccountNo } from "@/lib/crypto/account-no";
-import { nameKey } from "@/lib/normalize";
+import { nameKey, nullText } from "@/lib/normalize";
 import { companyDto, contactDto, probityDto } from "@/lib/dto";
 import type { CandidateItem, CompanyPatch, ContactInput, CompanyListItem, CompanyDetail } from "@/lib/api-types";
 import * as repo from "@/repositories/companies.repository";
@@ -19,10 +19,19 @@ async function uniqueCompany(values: { name: string; tin: string | null; branchC
   if (await repo.findCompanyNameConflict(nameKey(values.name), id, ex)) throw new AppError(409, "A client with this registered name already exists.", "name");
   if (values.tin && await repo.findCompanyTinConflict(values.tin, values.branchCode, id, ex)) throw new AppError(409, "A client with this TIN and branch already exists.", "tin");
 }
-function encryptedInput(input: CompanyPatch) {
-  const { accountNo, ...values } = input;
+export function accountNumber(value: unknown): { accountNo: string | null; accountNoLast4: string | null } {
+  if (value != null && typeof value !== "string") invalid("accountNo", "Enter a bank account number containing digits");
+  const accountNo = (value as string | null | undefined)?.trim() || null;
+  const digits = accountNo?.replace(/\D/g, "") ?? "";
+  if (accountNo && (!nullText(accountNo) || !digits)) invalid("accountNo", "Enter a bank account number containing digits");
+  return { accountNo, accountNoLast4: digits.slice(-4) || null };
+}
+function encryptedInput(input: CompanyPatch, rawAccountNo: unknown) {
+  const values = { ...input };
+  delete values.accountNo;
+  const account = "accountNo" in input ? accountNumber(rawAccountNo) : undefined;
   return { ...values, ...(input.name === undefined ? {} : { nameKey: nameKey(input.name) }),
-    ...("accountNo" in input ? { accountNo: accountNo ? encryptAccountNo(accountNo) : null, accountNoLast4: accountNo ? accountNo.slice(-4) : null } : {}) };
+    ...(account ? { ...account, accountNo: account.accountNo ? encryptAccountNo(account.accountNo) : null } : {}) };
 }
 export async function getCompanies(): Promise<CompanyListItem[]> {
   const [companies, contacts, linked, probity] = await Promise.all([repo.listCompanies(), listContacts(), listLinkedCandidates(), listProbity()]);
@@ -44,6 +53,7 @@ export async function createCompany(body: unknown, createdBy: string) {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new AppError(400, "Expected an object");
   const { contacts, ...company } = body as Record<string, unknown>;
   const input = validateCompany(company);
+  const values = encryptedInput(input, company.accountNo);
   if (!Array.isArray(contacts) || !contacts.length) invalid("contacts", "A new client needs a contact email");
   const parsed = contacts.map((contact) => validateContact(contact) as ContactInput);
   if (!parsed.some((contact) => contact.emails.length)) invalid("contacts", "A new client needs a contact email");
@@ -52,7 +62,7 @@ export async function createCompany(body: unknown, createdBy: string) {
   return withTransaction(async (tx) => {
     await lockEmailOwnership(tx);
     await uniqueCompany({ name: input.name!, tin: input.tin ?? null, branchCode: input.branchCode ?? null }, undefined, tx);
-    const row = await repo.insertCompany({ ...encryptedInput(input), name: input.name!, nameKey: nameKey(input.name!), createdBy }, tx);
+    const row = await repo.insertCompany({ ...values, name: input.name!, nameKey: nameKey(input.name!), createdBy }, tx);
     // Insert the chosen main first; the first-contact rule then leaves all other roles intact.
     await addContactInTransaction(row.id, { ...parsed[main], billingRole: "main" }, tx);
     for (let i = 0; i < parsed.length; i++) if (i !== main) await addContactInTransaction(row.id, { ...parsed[i], billingRole: parsed[i].billingRole ?? "cc" }, tx);
@@ -62,12 +72,13 @@ export async function createCompany(body: unknown, createdBy: string) {
 }
 export async function patchCompany(id: number, body: unknown) {
   const input = validateCompany(body, true);
+  const values = encryptedInput(input, (body as Record<string, unknown>).accountNo);
   return withTransaction(async (tx) => {
     await lockEmailOwnership(tx);
     const old = await repo.findCompany(id, tx);
     if (!old) throw new AppError(404, "Client not found");
     await uniqueCompany({ ...old, ...input }, id, tx);
-    const saved = (await repo.updateCompany(id, encryptedInput(input), tx))!;
+    const saved = (await repo.updateCompany(id, values, tx))!;
     await refreshProbityMatches(tx);
     return companyDto(saved);
   });

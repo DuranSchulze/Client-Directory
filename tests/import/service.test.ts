@@ -3,10 +3,10 @@ import * as XLSX from "xlsx";
 import { decryptAccountNo } from "@/lib/crypto/account-no";
 
 const m = vi.hoisted(() => ({
-  transaction: vi.fn(), lock: vi.fn(), snapshot: vi.fn(), companies: vi.fn(), contacts: vi.fn(), dept: vi.fn(), suppliers: vi.fn(), probity: vi.fn(), refresh: vi.fn(), trace: [] as string[],
+  transaction: vi.fn(), lock: vi.fn(), snapshot: vi.fn(), companies: vi.fn(), contacts: vi.fn(), dept: vi.fn(), suppliers: vi.fn(), probity: vi.fn(), updateCompany: vi.fn(), updateProbity: vi.fn(), updateSupplier: vi.fn(), refresh: vi.fn(), trace: [] as string[],
 }));
 vi.mock("@/db", () => ({ db: {}, withTransaction: m.transaction }));
-vi.mock("@/repositories/import.repository", () => ({ readImportSnapshot: m.snapshot, insertImportCompanies: m.companies, insertImportContacts: m.contacts, insertImportDeptEmails: m.dept, insertImportSuppliers: m.suppliers, insertImportProbity: m.probity }));
+vi.mock("@/repositories/import.repository", () => ({ readImportSnapshot: m.snapshot, insertImportCompanies: m.companies, insertImportContacts: m.contacts, insertImportDeptEmails: m.dept, insertImportSuppliers: m.suppliers, insertImportProbity: m.probity, updateImportCompany: m.updateCompany, updateImportProbity: m.updateProbity, updateImportSupplier: m.updateSupplier }));
 vi.mock("@/repositories/ownership.repository", () => ({ lockEmailOwnership: m.lock }));
 vi.mock("@/services/probity.service", () => ({ refreshProbityMatches: m.refresh }));
 beforeEach(() => {
@@ -20,12 +20,12 @@ beforeEach(() => {
   for (const [name, fn] of [["dept", m.dept], ["suppliers", m.suppliers], ["contacts", m.contacts], ["probity", m.probity], ["refresh", m.refresh]] as const) fn.mockImplementation(async () => { m.trace.push(name); });
 });
 afterEach(() => vi.unstubAllEnvs());
-function workbook(): Buffer {
+function workbook(accountNo: unknown = "000123456"): Buffer {
   const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["REGISTERED NAME", "EMAIL ADDRESS", "ACCOUNT NO"], ["Acme", "client@example.test", "000123456"]]), "All Clients Database");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["REGISTERED NAME", "EMAIL ADDRESS", "ACCOUNT NO"], ["Acme", "client@example.test", accountNo]]), "All Clients Database");
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["Name", "Email Address"], ["Staff", "staff@example.test"]]), "All Dept. Emails");
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["Supplier /Contractor", "Particulars"], ["Vendor", "Print"]]), "OPS Supplier");
-  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["COMPANY", "Reference Number"], ["Acme", "R1"]]), "Probity Clients");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["COMPANY", "Reference Number", "Service"], ["Acme", "R1", "Sheet service"]]), "Probity Clients");
   return XLSX.write(book, { type: "buffer", bookType: "xlsx" });
 }
 it("dry-run writes nothing and never includes a bank number in the preview", async () => {
@@ -36,6 +36,32 @@ it("dry-run writes nothing and never includes a bank number in the preview", asy
   expect(m.transaction).not.toHaveBeenCalled();
   expect(m.companies).not.toHaveBeenCalled();
   expect(m.contacts).not.toHaveBeenCalled();
+});
+it("uses import-only guarded updates for existing companies and probity", async () => {
+  m.snapshot.mockResolvedValue({ companies: [{ id: 5, name: "Acme", nameKey: "acme", type: "Non-individual", entities: [], isNew: false, accountNo: null }], contacts: [], deptEmails: [], suppliers: [],
+    probity: [{ id: 6, companyListed: "Acme", referenceNo: "R1", draftedOn: null, emails: [], companyId: null, matchedBy: null, service: null }] });
+  const { importWorkbook } = await import("@/services/import.service");
+  await importWorkbook(workbook("12-3"), false, "admin@example.test");
+  expect(m.companies).not.toHaveBeenCalled();
+  expect(m.updateCompany).toHaveBeenCalledWith(5, expect.objectContaining({ accountNoLast4: "123" }), { transaction: true });
+  expect(decryptAccountNo(m.updateCompany.mock.calls[0][1].accountNo)).toBe("12-3");
+  expect(m.updateProbity).toHaveBeenCalledWith(6, expect.objectContaining({ service: "Sheet service" }), { transaction: true });
+});
+it.each(["N/A", "na", "-", "tBd", "#REF!", "no digits"])("drops and flags invalid imported account %s in preview and commit", async (value) => {
+  const { importWorkbook } = await import("@/services/import.service");
+  const preview = await importWorkbook(workbook(value), true, "admin@example.test");
+  expect("preview" in preview && preview.preview.buckets.invalidValues).toEqual([expect.objectContaining({ field: "accountNo" })]);
+  const result = await importWorkbook(workbook(value), false, "admin@example.test");
+  expect("result" in result && result.result.buckets.invalidValues).toEqual([expect.objectContaining({ field: "accountNo" })]);
+  expect(m.companies.mock.calls[0][0][0]).toMatchObject({ accountNo: null, accountNoLast4: null });
+});
+it.each([[" 12-345 (67) ", "12-345 (67)", "4567"], ["1-2", "1-2", "12"], [" ", null, null], [null, null, null]])("normalizes imported account %s without encrypting blanks", async (value, normalized, last4) => {
+  const { importWorkbook } = await import("@/services/import.service");
+  const result = await importWorkbook(workbook(value), false, "admin@example.test");
+  const stored = m.companies.mock.calls[0][0][0];
+  expect(stored.accountNoLast4).toBe(last4);
+  expect(stored.accountNo ? decryptAccountNo(stored.accountNo) : null).toBe(normalized);
+  expect("result" in result && result.result.buckets.invalidValues).toEqual([]);
 });
 it("locks before replanning, writes in order, encrypts bank numbers and uses the transaction throughout", async () => {
   const { importWorkbook } = await import("@/services/import.service");

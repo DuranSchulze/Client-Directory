@@ -1,7 +1,7 @@
 import { withTransaction } from "@/db";
 import { AppError } from "@/lib/errors";
 import { contactDto } from "@/lib/dto";
-import { isFreeMail } from "@/lib/normalize";
+import { EMAIL_RE, isFreeMail, normEmail } from "@/lib/normalize";
 import type { CandidateItem, NeedsCompanyItem } from "@/lib/api-types";
 import { findApprovedCandidate, listUnlinkedCandidates } from "@/repositories/candidates.repository";
 import { findCompany, listCompanies } from "@/repositories/companies.repository";
@@ -27,7 +27,8 @@ export async function attachCandidate(candidateId: number, body: unknown) {
     await lockEmailOwnership(tx);
     const candidate = await findApprovedCandidate(candidateId, tx);
     if (!candidate) throw new AppError(404, "Approved candidate not found");
-    const addresses = emails(candidate.fields.emails?.value ?? []);
+    const raw = candidate.fields.emails?.value;
+    const addresses = emails(Array.isArray(raw) ? raw.filter((email): email is string => typeof email === "string" && EMAIL_RE.test(normEmail(email))).map(normEmail) : []);
     if (!addresses.length) throw new AppError(400, "Candidate has no email addresses", "emails");
     if (!await findCompany(companyId, tx)) throw new AppError(404, "Client not found");
     await assertEmailsAvailable(addresses, companyId, tx);

@@ -17,6 +17,26 @@ function company(): CompanyRow {
   const fields = Object.fromEntries([...COMPANY_TEXT_FIELDS, ...COMPANY_DATE_FIELDS].map((key) => [key, null])) as Pick<CompanyRow, (typeof COMPANY_TEXT_FIELDS)[number] | (typeof COMPANY_DATE_FIELDS)[number]>;
   return { ...fields, id: 1, name: "Acme Inc.", nameKey: "acme", type: "Non-individual", entities: ["DDS"], isNew: false, engagement: "inactive", efps: null, accountNo: "existing-cipher", accountNoLast4: "6789", createdBy: "admin", createdAt: new Date(), updatedAt: new Date(), address: "Admin edited address" };
 }
+it("merges a named department row's own addresses and new free addresses, across repeated rows and re-import", () => {
+  const parsed = parse({ "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS"]],
+    "All Dept. Emails": [["Department", "Name", "Email Address"],
+      ["Legal", "Staff", "a@example.test, b@example.test, client@example.test, other@example.test"],
+      ["Legal", "STAFF", "b@example.test, c@example.test"],
+    ],
+  });
+  const old = snapshot();
+  old.deptEmails = [
+    { id: 1, department: "Legal", name: "Staff", title: "Admin title", emails: ["a@example.test"], sortOrder: 1 },
+    { id: 2, department: "Legal", name: "Other", title: null, emails: ["other@example.test"], sortOrder: 2 },
+  ];
+  old.contacts = [{ id: 1, companyId: 99, name: null, designation: null, emails: ["client@example.test"], phones: [], billingRole: "main", updatedAt: new Date() }];
+  const first = planImport(parsed, old);
+  expect(first.deptEmails).toEqual([{ id: 1, values: { department: "Legal", emails: ["a@example.test", "b@example.test", "c@example.test"] } }]);
+  expect(first.preview.buckets.internalEmails).toHaveLength(2);
+  expect(old.deptEmails[0].emails).toEqual(["a@example.test"]);
+  old.deptEmails[0] = { ...old.deptEmails[0], ...first.deptEmails[0].values };
+  expect(planImport(parsed, old).deptEmails).toHaveLength(0);
+});
 it("merges spellings, keeps the first email owner and excludes the parsed department tab", () => {
   const input = parse({ "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS", "ALIAS"], ["The Acme Inc.", "shared@example.test", null], ["ACME LTD", "second@example.test", "Alias"], ["Other", "shared@example.test"], ["Internal", "staff@example.test"]],
     "All Dept. Emails": [["Name", "Email Address"], ["Staff", "staff@example.test"]] });

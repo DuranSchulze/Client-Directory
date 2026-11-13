@@ -56,6 +56,11 @@ export function parseDate(cell: XLSX.CellObject | undefined, date1904 = false): 
   return Number.isFinite(Date.parse(result)) && new Date(result).toISOString().slice(0, 10) === result ? result : null;
 }
 function split(value: string | null): string[] { return value ? value.split(/\s+\/\s+|[\r\n]+/).map((part) => part.trim()) : []; }
+function contactPerson(value: string | undefined): Pick<ContactInput, "name" | "designation"> {
+  const name = nullText(value);
+  const parts = name?.match(/^(.+?)\s+[-\u2013]\s+(.+)$/) ?? name?.match(/^(.+?)\s*\(([^()]+)\)\s*$/);
+  return parts ? { name: parts[1].trim(), designation: parts[2].trim() } : { name, designation: null };
+}
 function parseContacts(values: Record<string, string | null>, source: Source, buckets: ImportBuckets): ContactInput[] {
   const names = split(values.contactPeople), phones = split(values.contactPhones), addresses = split(values.contactEmails), roles = split(values.contactBilling);
   const mismatch = addresses.length > 0 && [names, phones, roles].some((parts) => parts.length > 0 && parts.length !== addresses.length);
@@ -64,10 +69,10 @@ function parseContacts(values: Record<string, string | null>, source: Source, bu
   if (mismatch) {
     issue(buckets, "checkContacts", source, "Packed contact counts differ; email extraction used");
     const extracted = parseEmails(values.contactEmails, source, buckets, true);
-    contacts = extracted.map((email, index) => ({ emails: [email], billingRole: roles.length === extracted.length ? roleAt(index) : index ? "cc" : "main", name: names[index] || null, phones: phoneList(phones[index] || null, source, buckets) }));
+    contacts = extracted.map((email, index) => ({ emails: [email], billingRole: roles.length === extracted.length ? roleAt(index) : index ? "cc" : "main", ...contactPerson(names[index]), phones: phoneList(phones[index] || null, source, buckets) }));
   } else contacts = addresses.flatMap((address, index) => {
     const emails = parseEmails(address, source, buckets);
-    return emails.length ? [{ emails, name: nullText(names[index]), phones: phoneList(phones[index] || null, source, buckets), billingRole: roleAt(index) }] : [];
+    return emails.length ? [{ emails, ...contactPerson(names[index]), phones: phoneList(phones[index] || null, source, buckets), billingRole: roleAt(index) }] : [];
   });
   const listed = new Set(contacts.flatMap((contact) => contact.emails));
   for (const email of parseEmails(values.siEmail, source, buckets)) if (!listed.has(email)) { contacts.push({ emails: [email], billingRole: "none" }); listed.add(email); }
@@ -76,7 +81,8 @@ function parseContacts(values: Record<string, string | null>, source: Source, bu
 function valuesFor(table: Table, row: XLSX.CellObject[]): { values: Record<string, string | null>; cells: Record<string, XLSX.CellObject | undefined> } {
   const values: Record<string, string | null> = {}, cells: Record<string, XLSX.CellObject | undefined> = {};
   for (const [column, key] of table.columns) {
-    const value = cellText(row[column]);
+    // Preserve bank null tokens for the import validator instead of silently treating them as blanks.
+    const value = key === "accountNo" ? (cellText(row[column]) ?? String(row[column]?.w ?? row[column]?.v ?? "").trim()) : cellText(row[column]);
     if (values[key] && value && ["emails", "contactEmails"].includes(key)) values[key] += "\n" + value;
     else if (!values[key]) { values[key] = value; cells[key] = row[column]; }
   }
@@ -91,7 +97,7 @@ export function parseWorkbook(data: Buffer): ParsedImport {
   const result: ParsedImport = { companies: [], deptEmails: [], suppliers: [], probity: [], buckets: emptyBuckets() };
   const tables = readTables(data, result.buckets);
   for (const table of tables) {
-    let department = "Other";
+    let department = "Other", baseDepartment: string | null = null;
     for (let r = 1; r < table.cells.length; r++) {
       const row = table.cells[r] ?? [];
       if (!row.some((cell) => cellText(cell))) continue;
@@ -131,7 +137,12 @@ export function parseWorkbook(data: Buffer): ParsedImport {
         result.suppliers.push({ ...source, value: { name: v.name, particulars: v.particulars, contactName: v.contactName ?? contactName, emails: [...new Set([...addresses, ...parseEmails(detailEmails.join("\n"), source, result.buckets)])], phones: phoneList(v.phones, source, result.buckets) } });
       } else {
         const filled = row.map((cell, column) => ({ text: cellText(cell), column })).filter((cell) => cell.text);
-        if (filled.length === 1 && [1, 2].includes(filled[0].column) && !filled[0].text!.includes("@")) { department = filled[0].text!; continue; }
+        if (filled.length === 1 && [0, 1, 2].includes(filled[0].column) && !filled[0].text!.includes("@") && typeof row[0]?.v !== "number" && !/^[+-]?\d+(?:\.\d+)?$/.test(filled[0].text!)) {
+          const heading = filled[0].text!;
+          if (/department/i.test(heading)) { baseDepartment = heading; department = heading; }
+          else department = baseDepartment ? `${baseDepartment} \u00b7 ${heading}` : heading;
+          continue;
+        }
         const addresses = parseEmails(v.emails, source, result.buckets);
         if (!v.name && !v.title && !addresses.length) continue;
         result.deptEmails.push({ ...source, value: { department: v.department ?? department, name: v.name, title: v.title, emails: addresses, sortOrder: r } });

@@ -9,6 +9,33 @@ function workbook(tabs: Record<string, unknown[][]>): Buffer {
   for (const [name, cells] of Object.entries(tabs)) XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(cells), name);
   return XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true });
 }
+it("splits names and designations in zipped contacts and the packed-contact fallback", () => {
+  const parsed = parseWorkbook(workbook({ "All Clients Database": [
+    ["REGISTERED NAME", "EMAIL ADDRESS", "CONTACT PERSON/DESIGNATION"],
+    ["Zipped", "a@example.test / b@example.test / c@example.test / d@example.test", "Ana - Manager / Ben \u2013 Accountant / Cara (Director) / Dana"],
+    ["Fallback", "e@example.test / f@example.test", "Eli (Owner)"],
+  ] }));
+  expect(parsed.companies[0].contacts.map(({ name, designation }) => [name, designation])).toEqual([
+    ["Ana", "Manager"], ["Ben", "Accountant"], ["Cara", "Director"], ["Dana", null],
+  ]);
+  expect(parsed.companies[1].contacts[0]).toMatchObject({ name: "Eli", designation: "Owner" });
+  expect(parsed.buckets.checkContacts).toHaveLength(1);
+});
+it("keeps the base department for headings in columns A, B and C, without treating numbered people as headings", () => {
+  const parsed = parseWorkbook(workbook({
+    "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS"]],
+    "All Dept. Emails": [["No.", "Name", "Title", "Email Address"],
+      ["LEGAL DEPARTMENT"], [null, "CORPORATE TEAM"], [1, "Ana", "Lawyer", "ana@example.test"],
+      [null, null, "LITIGATION TEAM"], [2, "Ben", null, "ben@example.test"],
+      [null, "ACCOUNTING DEPARTMENT"], [null, null, "PAYROLL"], [3, "Cara", null, "cara@example.test"],
+      [4, "Numbered person"],
+    ],
+  }));
+  expect(parsed.deptEmails.map(({ value: v }) => [v.department, v.name])).toEqual([
+    ["LEGAL DEPARTMENT \u00b7 CORPORATE TEAM", "Ana"], ["LEGAL DEPARTMENT \u00b7 LITIGATION TEAM", "Ben"],
+    ["ACCOUNTING DEPARTMENT \u00b7 PAYROLL", "Cara"], ["ACCOUNTING DEPARTMENT \u00b7 PAYROLL", "Numbered person"],
+  ]);
+});
 it("normalizes tabs and headers, zips contacts, keeps SI emails and parses sheet values", () => {
   const data = workbook({ "ALL CLIENTS  Database": [
     ["REGISTERED NAME", "EMAIL ADDRESS", "CONTACT PERSON/DESIGNATION", "CONTACT NO.", "BILLING", "INTERCOMPANY", "ENGAGEMENT STATUS", "INDIVIDUAL", "DATE OF INCORPORATION", "RDO CODE", "BRANCH CODE", "ZIP CODE", "Email (for SI)", "DATE LAST CHECKED\n(BILLING)", "Unknown column"],

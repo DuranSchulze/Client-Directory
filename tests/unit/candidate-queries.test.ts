@@ -18,6 +18,8 @@ it("queries only approved candidates, coalesces reviewed fields, caps reads and 
   const unlinked = dialect.sqlToQuery(chain.where.mock.calls[1][0]);
   expect(unlinked.sql).toContain('NOT EXISTS (SELECT 1 FROM "contacts"');
   expect(unlinked.sql).toContain('NOT EXISTS (SELECT 1 FROM "dept_emails"');
+  expect(unlinked.sql).toMatch(/cardinality\(ARRAY\(SELECT lower\(jsonb_array_elements_text/);
+  expect(unlinked.sql).toContain('> 0');
   expect(unlinked.params).toContain("approved");
   expect(chain.limit).toHaveBeenLastCalledWith(5000);
   await findApprovedCandidate(7, ex as unknown as Executor);

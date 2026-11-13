@@ -15,6 +15,7 @@ export async function listLinkedCandidates(companyId: number | undefined = undef
 }
 export async function listUnlinkedCandidates(ex: Executor = db) {
   return ex.select({ id: candidates.id, fields }).from(candidates).where(and(eq(candidates.reviewState, "approved"),
+    sql`cardinality(${emails}) > 0`,
     sql`NOT EXISTS (SELECT 1 FROM ${contacts} WHERE ${contacts.emails} && ${emails})`,
     sql`NOT EXISTS (SELECT 1 FROM ${dept} WHERE ${dept.emails} && ${emails})`)).orderBy(candidates.id).limit(5000);
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AppError } from "@/lib/errors";
-import { encryptAccountNo } from "@/lib/crypto/account-no";
+import { encryptAccountNo, decryptAccountNo } from "@/lib/crypto/account-no";
+import { validateContact } from "@/services/validation.service";
 
 const m = vi.hoisted(() => ({
   findCompany: vi.fn(), listCompanies: vi.fn(), insertCompany: vi.fn(), updateCompany: vi.fn(), findCompanyNameConflict: vi.fn(), findCompanyTinConflict: vi.fn(),
@@ -90,6 +91,37 @@ it("attaches all approved-candidate emails as cc after checking ownership", asyn
   await expect(attachCandidate(3, { companyId: 1 })).rejects.toMatchObject({ status: 409 });
   m.findApprovedCandidate.mockResolvedValue(null);
   await expect(attachCandidate(3, { companyId: 1 })).rejects.toMatchObject({ status: 404 });
+});
+it("attaches valid candidate addresses after dropping malformed entries and deduping, while strict contact validation remains unchanged", async () => {
+  const { attachCandidate } = await import("@/services/needs-company.service");
+  m.findApprovedCandidate.mockResolvedValue({ id: 3, fields: { emails: { value: [" NEW@EXAMPLE.COM ", "bad email", "new@example.com", null, 3, "other@example.test"] } } });
+  expect(await attachCandidate(3, { companyId: 1 })).toMatchObject({ emails: ["new@example.com", "other@example.test"] });
+  expect(() => validateContact({ emails: ["new@example.com", "bad email"] })).toThrow();
+  await expect(attachCandidate(3, { companyId: "invalid" })).rejects.toMatchObject({ status: 400, field: "companyId" });
+});
+it.each([{ value: [] }, { value: ["bad", null] }, { value: undefined }])("rejects attaching when no valid candidate address remains: %j", async ({ value }) => {
+  const { attachCandidate } = await import("@/services/needs-company.service");
+  m.findApprovedCandidate.mockResolvedValue({ id: 3, fields: { emails: { value } } });
+  await expect(attachCandidate(3, { companyId: 1 })).rejects.toMatchObject({ status: 400, field: "emails" });
+  expect(m.insertContact).not.toHaveBeenCalled();
+});
+it.each(["N/A", "na", "-", "TbD", "#ref!", "no number"])("rejects account token/no-digits %s in create and PATCH", async (accountNo) => {
+  const { createCompany, patchCompany } = await import("@/services/companies.service");
+  await expect(createCompany({ name: "Acme", accountNo, contacts: [{ emails: ["x@example.com"] }] }, "admin@example.test")).rejects.toMatchObject({ status: 400, field: "accountNo" });
+  await expect(patchCompany(1, { accountNo })).rejects.toMatchObject({ status: 400, field: "accountNo" });
+  expect(m.insertCompany).not.toHaveBeenCalled(); expect(m.updateCompany).not.toHaveBeenCalled();
+});
+it.each([[" 0012-3456 (78) ", "0012-3456 (78)", "5678"], ["12-3", "12-3", "123"], ["  ", null, null], [null, null, null]])("stores normalized account %s and digit-only last four in create/PATCH", async (accountNo, normalized, last4) => {
+  const { createCompany, patchCompany } = await import("@/services/companies.service");
+  const saved = { id: 1, createdAt: new Date(), updatedAt: new Date() };
+  m.insertCompany.mockImplementation((values) => ({ ...saved, ...values }));
+  m.updateCompany.mockImplementation((_id, values) => ({ ...saved, name: "Acme", ...values }));
+  await createCompany({ name: "Acme", accountNo, contacts: [{ emails: ["x@example.com"] }] }, "admin@example.test");
+  await patchCompany(1, { accountNo });
+  for (const values of [m.insertCompany.mock.calls[0][0], m.updateCompany.mock.calls[0][1]]) {
+    expect(values.accountNoLast4).toBe(last4);
+    expect(values.accountNo ? decryptAccountNo(values.accountNo) : null).toBe(normalized);
+  }
 });
 it("checks department email ownership inside the shared lock before inserting", async () => {
   const { saveDeptEmail } = await import("@/services/dept-emails.service");

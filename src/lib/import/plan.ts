@@ -41,24 +41,30 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
   const contacts: ImportPlan["contacts"] = [];
   const owners = new Map<string, number>(snapshot.contacts.flatMap((row) => row.emails.map((email) => [lower(email), row.companyId] as const)));
   const internal = new Set([...snapshot.deptEmails.flatMap((row) => row.emails), ...parsed.deptEmails.flatMap(({ value }) => value.emails ?? [])].map(lower));
-  const deptOwned = new Set(snapshot.deptEmails.flatMap((row) => row.emails).map(lower));
+  const deptOwned = new Map(snapshot.deptEmails.flatMap((row) => row.emails.map((email) => [lower(email), row.id] as const)));
   const hasMain = new Set(snapshot.contacts.filter((row) => row.billingRole === "main").map((row) => row.companyId));
   const hasContacts = new Set(snapshot.contacts.map((row) => row.companyId));
   const flag = (bucket: keyof typeof buckets, source: Source, reason: string, field?: string) => buckets[bucket].push({ ...source, reason, ...(field ? { field } : {}) });
   for (const source of parsed.deptEmails) {
     const incoming = { ...source.value };
-    if (incoming.emails?.some((email) => deptOwned.has(lower(email)))) continue;
+    const named = !!lower(incoming.name);
+    const old = named ? dept.get(deptKey(incoming)) : undefined;
+    if (!named && incoming.emails?.some((email) => deptOwned.has(lower(email)))) continue;
     incoming.emails = (incoming.emails ?? []).filter((email) => {
-      if (!owners.has(lower(email))) return true;
-      flag("internalEmails", source, "Department email already belongs to a client; address skipped", "emails"); return false;
+      if (owners.has(lower(email))) { flag("internalEmails", source, "Department email already belongs to a client; address skipped", "emails"); return false; }
+      const owner = deptOwned.get(lower(email));
+      if (owner === undefined || owner === old?.id) return true;
+      flag("internalEmails", source, "Department email already belongs to another mailbox; address skipped", "emails"); return false;
     });
     if (source.value.emails?.length && !incoming.emails.length) continue;
-    for (const email of incoming.emails) deptOwned.add(lower(email));
-    const key = deptKey(incoming), old = dept.get(key);
     if (!old) {
-      const id = nextId--; dept.set(key, { ...incoming, id }); deptWrites.set(id, incoming);
+      const id = nextId--; dept.set(deptKey(incoming), { ...incoming, id }); deptWrites.set(id, incoming);
+      for (const email of incoming.emails) deptOwned.set(lower(email), id);
     } else {
       const changes = fillEmpty(old, incoming);
+      const emails = [...new Set([...(old.emails ?? []), ...incoming.emails])];
+      if (emails.length !== (old.emails ?? []).length) changes.emails = emails;
+      for (const email of emails) deptOwned.set(lower(email), old.id);
       if (Object.keys(changes).length) { Object.assign(old, changes); deptWrites.set(old.id, { ...deptWrites.get(old.id), ...changes, department: old.department }); }
     }
   }
