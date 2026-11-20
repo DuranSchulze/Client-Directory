@@ -66,7 +66,7 @@ export function ClientSheet({ id, onClose }: { id: number | null; onClose: () =>
         <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="flex-1 overflow-y-auto px-5 pt-2 pb-8 sm:px-6">
           {error ? <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
             : !data ? <div role="status" aria-label="Loading" className="flex flex-col gap-3">{[0, 1, 2].map((i) => <div key={i} className="h-32 animate-pulse rounded-xl bg-sunk" />)}</div>
-            : tab === "Company" ? <CompanyTab detail={data} onDirty={setDirty} onOpenContacts={() => setTab("Contacts")} />
+            : tab === "Company" ? <CompanyTab detail={data} onDirty={setDirty} onOpenContacts={() => setTab("Contacts")} onOpenActivity={() => setTab("Activity")} />
             : tab === "Contacts" ? <ContactsTab detail={data} />
             : tab === "Activity" ? <ActivityTab activity={data.activity} />
             : <RecordTab detail={data} />}

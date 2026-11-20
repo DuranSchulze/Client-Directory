@@ -23,7 +23,6 @@ const FIELDS: RecordField[] = [
   { key: "emails", label: "Email addresses", kind: "list" },
   { key: "service", label: "Service" },
   { key: "draftedOn", label: "Date drafted", kind: "date" },
-  { key: "agreementUrl", label: "Link of signed agreement", kind: "url", full: true },
   { key: "remarks", label: "Remarks / status", kind: "textarea" },
 ];
 const toValues = (p?: ProbityItem): RecordValues => ({
@@ -69,9 +68,6 @@ export function ProbityView() {
     { key: "contact", header: "Contact", desktopOnly: true, render: (p) => <div className="min-w-0"><span>{p.contactPerson ?? DASH}</span>{p.emails[0] && <span className="block truncate text-xs text-muted-foreground">{p.emails.join(", ")}</span>}</div> },
     { key: "ref", header: "Reference", desktopOnly: true, sortValue: (p) => p.referenceNo, className: "whitespace-nowrap tabular-nums", render: (p) => p.referenceNo ?? DASH },
     { key: "drafted", header: "Drafted", desktopOnly: true, sortValue: (p) => p.draftedOn, className: "whitespace-nowrap tabular-nums text-muted-foreground", render: (p) => day(p.draftedOn) },
-    { key: "agreement", header: "Agreement", desktopOnly: true, render: (p) => p.agreementUrl
-      ? <a href={p.agreementUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="link-draw whitespace-nowrap">Signed copy</a>
-      : <span className="font-semibold text-destructive">Missing</span> },
     { key: "remarks", header: "Remarks / status", desktopOnly: true, className: "max-w-[16rem] text-muted-foreground", render: (p) => <span className="line-clamp-2">{p.remarks ?? DASH}</span> },
     { key: "edit", header: "", className: "w-10", render: (p) => (
       <Button size="icon-sm" variant="ghost" aria-label={`Edit ${p.companyListed}`} onClick={(e) => { e.stopPropagation(); setEditing(p); }}><Pencil /></Button>

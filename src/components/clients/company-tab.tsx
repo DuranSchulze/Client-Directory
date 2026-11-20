@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, Pencil, TriangleAlert } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, fieldProps } from "@/components/shared/field";
 import { request, ApiError } from "@/lib/api/http";
@@ -12,8 +12,10 @@ import { DASH, day, orDash } from "@/lib/format";
 import { CompanyGroups, diffDraft, type CompanyDraft } from "./company-form";
 import { GROUPS, validateCompanyDraft, type FieldDef } from "./company-fields";
 import { Section } from "./client-sheet";
+import { STAGE_LABEL } from "@/components/shared/pills";
 import { toast } from "sonner";
-import { revealSecondsLeft } from "@/lib/ui-helpers";
+import { money } from "@/lib/format";
+import { paymentTotals, revealSecondsLeft } from "@/lib/ui-helpers";
 
 const toDraft = (c: CompanyItem): CompanyDraft => {
   const d: Record<string, unknown> = {};
@@ -32,7 +34,7 @@ function display(def: FieldDef, c: CompanyItem): React.ReactNode {
   return orDash(v as string | null);
 }
 
-export function CompanyTab({ detail, onDirty, onOpenContacts }: { detail: CompanyDetail; onDirty: (dirty: boolean) => void; onOpenContacts: () => void }) {
+export function CompanyTab({ detail, onDirty, onOpenContacts, onOpenActivity }: { detail: CompanyDetail; onDirty: (dirty: boolean) => void; onOpenContacts: () => void; onOpenActivity: () => void }) {
   const c = detail.company;
   const [editing, setEditing] = useState(false);
   const [draft, setDraftState] = useState<CompanyDraft>(() => toDraft(c));
@@ -85,20 +87,27 @@ export function CompanyTab({ detail, onDirty, onOpenContacts }: { detail: Compan
   }
 
   const probity = detail.probity[0];
+  const payments = detail.activity.payments;
+  const totals = paymentTotals(payments);
+  const lastPaid = payments.reduce<string | null>((m, p) => (p.date && (!m || p.date > m) ? p.date : m), null);
   return (
     <div>
-      {detail.activity.needsCheck.map((msg, i) => (
-        <p key={i} className="mb-1.5 flex items-start gap-2.5 rounded-lg bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] px-3 py-2.5 text-[13px]">
-          <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />{msg}
-        </p>
-      ))}
+      <Section title="Payments" action={<Button variant="link" size="sm" onClick={onOpenActivity}>See activity</Button>}>
+        {payments.length === 0 ? <p className="text-sm text-muted-foreground">No verified payments yet.</p> : (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <div><dt className="text-xs text-muted-foreground">Total paid</dt>
+              <dd className="mt-0.5 flex flex-col font-bold tabular-nums">{totals.map((t) => <span key={t.currency ?? "unknown"}>{money({ amount: t.amount, currency: t.currency })}</span>)}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Payments</dt><dd className="mt-0.5 font-semibold tabular-nums">{payments.length}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Last payment</dt><dd className="mt-0.5 tabular-nums">{day(lastPaid)}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Stage</dt><dd className="mt-0.5">{detail.activity.stage ? STAGE_LABEL[detail.activity.stage] : DASH}</dd></div>
+          </dl>
+        )}
+      </Section>
       {probity && (
         <Section title="Probity" action={<Button variant="link" size="sm" nativeButton={false} render={<a href="/probity" />}>Open list</Button>}>
           <dl className="grid grid-cols-[7.5rem_1fr] gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Reference</dt><dd>{orDash(probity.referenceNo)}</dd>
             <dt className="text-muted-foreground">Drafted</dt><dd>{day(probity.draftedOn)}</dd>
-            <dt className="text-muted-foreground">Agreement</dt>
-            <dd>{probity.agreementUrl ? <a href={probity.agreementUrl} target="_blank" rel="noreferrer" className="link-draw">Signed copy</a> : <span className="font-semibold text-destructive">Missing</span>}</dd>
             <dt className="text-muted-foreground">Remarks</dt><dd>{orDash(probity.remarks)}</dd>
           </dl>
         </Section>

@@ -1,9 +1,12 @@
-import { Inbox, Lock, Mail, TriangleAlert } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { Inbox, Lock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pill, STAGE_LABEL, type PillTone } from "@/components/shared/pills";
 import type { Activity } from "@/lib/api-types";
 import type { PaymentBasis } from "@/lib/candidate-types";
-import { STAGES } from "@/lib/enums";
 import { DASH, day, money } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { paymentTotals } from "@/lib/ui-helpers";
@@ -26,63 +29,39 @@ const EVENT: Record<string, { label: string; tone: PillTone }> = {
   payment_confirmed: { label: "Payment confirmed", tone: "success" },
 };
 
+const VIEWS = [
+  { id: "conversations", label: "Conversations" },
+  { id: "payments", label: "Payments" },
+  { id: "stages", label: "Stages" },
+] as const;
+type View = (typeof VIEWS)[number]["id"];
+
 export function ActivityTab({ activity: a }: { activity: Activity }) {
+  const [view, setView] = useState<View>("conversations");
   if (a.candidates.length === 0) {
     return <EmptyState icon={Inbox} title="No Gmail conversations match these contacts."
       description="Scraper conversations appear here, reviewed or not, when one of their emails is on this client's contacts." />;
   }
-  const reached = a.stage ? STAGES.indexOf(a.stage) : -1;
   const totals = paymentTotals(a.payments);
   return (
     <div>
-      <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Lock aria-hidden className="size-3.5" />Read-only. Includes conversations not yet reviewed in the Scraper.</p>
-      <Section title="Summary">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
+      <div role="tablist" aria-label="Activity views" className="mb-3 flex gap-1 rounded-full bg-sunk p-1 dark:bg-accent/60">
+        {VIEWS.map((v) => (
+          <button key={v.id} role="tab" type="button" aria-selected={view === v.id} onClick={() => setView(v.id)}
+            className={cn("flex-1 rounded-full px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap outline-none transition-[background-color,transform] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-ring",
+              view === v.id ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground")}>{v.label}</button>
+        ))}
+      </div>
+      {view === "conversations" && <>
+        <dl className="mb-3 grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl bg-sunk p-4 text-sm sm:grid-cols-4 dark:bg-accent/60">
           <div><dt className="text-xs text-muted-foreground">Stage</dt><dd className="mt-0.5">{a.summary.stage ? <Pill tone="gold">{STAGE_LABEL[a.summary.stage]}</Pill> : DASH}</dd></div>
           <div><dt className="text-xs text-muted-foreground">Messages</dt><dd className="mt-0.5 font-semibold tabular-nums">{a.summary.messages.toLocaleString()}</dd></div>
           <div><dt className="text-xs text-muted-foreground">First contact</dt><dd className="mt-0.5 tabular-nums">{day(a.summary.firstContact)}</dd></div>
           <div><dt className="text-xs text-muted-foreground">Last contact</dt><dd className="mt-0.5 tabular-nums">{day(a.summary.lastContact)}</dd></div>
         </dl>
-        {a.summary.latestSubjects.length > 0 && (
-          <div className="mt-3">
-            <h4 className="text-xs text-muted-foreground">Latest subjects</h4>
-            <ul className="mt-1 flex flex-col gap-1 text-[13px]">
-              {a.summary.latestSubjects.map((s) => <li key={s} className="flex min-w-0 items-start gap-2"><Mail aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 break-words">{s}</span></li>)}
-            </ul>
-          </div>
-        )}
-      </Section>
-      {a.needsCheck.map((msg, i) => (
-        <p key={i} className="mb-1.5 flex items-start gap-2.5 rounded-lg bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] px-3 py-2.5 text-[13px]">
-          <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />{msg}
-        </p>
-      ))}
-      <Section title="Engagement pipeline">
-        <ol className="grid grid-cols-2 gap-1 sm:grid-cols-4">
-          {STAGES.map((s, i) => (
-            <li key={s} className={cn("rounded-lg p-2.5 text-xs", i <= reached ? "bg-[color-mix(in_srgb,var(--primary)_20%,var(--card))]" : "bg-card")}>
-              <b className="block text-[13px]">{STAGE_LABEL[s]}</b>
-              <span className="text-muted-foreground tabular-nums">{a.stageDates[s] ? day(a.stageDates[s]) : DASH}</span>
-            </li>
-          ))}
-        </ol>
-      </Section>
-      <Section title="Quotes & invoices">
-        {a.amounts.length === 0 ? <p className="text-sm text-muted-foreground">None on record.</p> : (
-          <table className="w-full text-sm">
-            <thead className="sr-only"><tr><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
-            <tbody>
-              {a.amounts.map((x, i) => (
-                <tr key={i}>
-                  <td className="py-1.5"><Pill tone={x.stage === "quoted" ? "info" : "warning"}>{x.stage === "quoted" ? "Quote" : "Invoice"}</Pill></td>
-                  <td className="py-1.5 text-right font-semibold tabular-nums">{money(x)}</td>
-                  <td className="py-1.5 pl-3 text-right text-muted-foreground tabular-nums">{day(x.date)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Section>
+        <Conversations items={a.timeline.items} truncated={a.timeline.truncated} />
+      </>}
+      {view === "payments" && <>
       <Section title="Payments">
         {a.payments.length === 0 ? <p className="text-sm text-muted-foreground">No verified payments.</p> : (
           <table className="w-full text-sm">
@@ -105,27 +84,101 @@ export function ActivityTab({ activity: a }: { activity: Activity }) {
           </table>
         )}
       </Section>
-      <Section title={`Timeline${a.timeline.truncated ? " (latest 200)" : ""}`}>
-        {a.timeline.items.length === 0 ? <p className="text-sm text-muted-foreground">No staged messages.</p> : (
-          <ol className="relative flex flex-col gap-3 pl-6 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-0.5 before:rounded before:bg-accent">
-            {[...a.timeline.items].reverse().map((t, i) => {
+      <Section title="Quotes & invoices">
+        {a.amounts.length === 0 ? <p className="text-sm text-muted-foreground">None on record.</p> : (
+          <table className="w-full text-sm">
+            <thead className="sr-only"><tr><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
+            <tbody>
+              {a.amounts.map((x, i) => (
+                <tr key={i}>
+                  <td className="py-1.5"><Pill tone={x.stage === "quoted" ? "info" : "warning"}>{x.stage === "quoted" ? "Quote" : "Invoice"}</Pill></td>
+                  <td className="py-1.5 text-right font-semibold tabular-nums">{money(x)}</td>
+                  <td className="py-1.5 pl-3 text-right text-muted-foreground tabular-nums">{day(x.date)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
+      </>}
+      {view === "stages" && <StageTally items={a.timeline.items} current={a.stage} />}
+      <p className="mt-1 mb-0 flex items-center gap-2 text-xs text-muted-foreground"><Lock aria-hidden className="size-3.5" />Read-only. Includes conversations not yet reviewed in the Scraper.</p>
+    </div>
+  );
+}
+
+const PAGE = 20;
+const month = (d: string | null) => (d && Number.isFinite(Date.parse(d)) ? new Date(d).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "Undated");
+
+/** Newest first, grouped by month. Snippet is "Subject — body"; the subject leads. */
+function Conversations({ items, truncated }: { items: Activity["timeline"]["items"]; truncated: boolean }) {
+  const [shown, setShown] = useState(PAGE);
+  if (items.length === 0) return <p className="rounded-xl bg-sunk p-4 text-sm text-muted-foreground dark:bg-accent/60">No staged messages.</p>;
+  const sorted = [...items].reverse().slice(0, shown);
+  const groups: { label: string; rows: typeof sorted }[] = [];
+  for (const t of sorted) {
+    const label = month(t.date);
+    const g = groups[groups.length - 1];
+    if (g?.label === label) g.rows.push(t); else groups.push({ label, rows: [t] });
+  }
+  return (
+    <div>
+      <h3 className="mb-2 text-[13px] font-semibold text-muted-foreground">Recent conversations{truncated ? " (latest 200)" : ""}</h3>
+      {groups.map((g) => (
+        <section key={g.label} className="mb-4">
+          <h4 className="mb-1.5 px-1 text-xs font-semibold text-muted-foreground">{g.label}</h4>
+          <ol className="flex flex-col gap-1.5">
+            {g.rows.map((t, i) => {
               const ev = EVENT[t.stage] ?? { label: t.stage, tone: "neutral" as PillTone };
-              const strong = t.stage === "paid" || t.stage === "payment_confirmed";
+              const cut = t.snippet?.indexOf(" — ") ?? -1;
+              const subject = t.snippet && cut > 0 ? t.snippet.slice(0, cut).trim() : "";
+              const body = t.snippet ? (cut > 0 ? t.snippet.slice(cut + 3) : t.snippet).trim() : "";
               return (
-                <li key={`${t.raw_item_id}-${i}`} className="relative rounded-xl bg-card px-3.5 py-3">
-                  <span aria-hidden className={cn("absolute top-4 -left-[23px] size-2.5 rounded-full", strong ? "bg-primary" : "bg-muted-foreground")} />
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span className="tabular-nums">{day(t.date)}</span><Pill tone={ev.tone}>{ev.label}</Pill>
-                    {t.amounts.map((m, j) => <span key={j} className="font-semibold text-foreground tabular-nums">{money(m)}</span>)}
-                    <span>{[t.department, t.mailbox].filter(Boolean).join(" · ")}</span>
+                <li key={`${t.raw_item_id}-${i}`} className="flex gap-3 rounded-xl bg-sunk px-3.5 py-3 dark:bg-accent/60">
+                  <span className="w-11 shrink-0 pt-0.5 text-xs font-semibold text-muted-foreground tabular-nums">{t.date ? new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : DASH}</span>
+                  <div className="min-w-0 flex-1">
+                    {subject && <p className="text-[13px] font-semibold break-words">{subject}</p>}
+                    {body && <p className={cn("line-clamp-2 text-[13px] break-words", subject ? "mt-0.5 text-muted-foreground" : "text-foreground")}>{body}</p>}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <Pill tone={ev.tone}>{ev.label}</Pill>
+                      {t.amounts.map((m, j) => <span key={j} className="font-semibold text-foreground tabular-nums">{money(m)}</span>)}
+                      {[t.department, t.mailbox].filter(Boolean).length > 0 && <span className="min-w-0 break-all">{[t.department, t.mailbox].filter(Boolean).join(" · ")}</span>}
+                    </div>
                   </div>
-                  {t.snippet && <p className="mt-1 text-[13px] text-foreground">{t.snippet}</p>}
                 </li>
               );
             })}
           </ol>
-        )}
-      </Section>
+        </section>
+      ))}
+      {shown < items.length && <Button variant="secondary" size="sm" onClick={() => setShown((n) => n + PAGE)}>Show older ({items.length - shown})</Button>}
     </div>
+  );
+}
+
+/** A client has many threads, so stages overlap in time. Count messages per stage, not a sequence. */
+function StageTally({ items, current }: { items: Activity["timeline"]["items"]; current: Activity["stage"] }) {
+  const rows = Object.keys(EVENT).map((k) => {
+    const hits = items.filter((t) => t.stage === k);
+    const dates = hits.map((t) => t.date).filter((d): d is string => !!d).sort();
+    return { k, count: hits.length, first: dates[0] ?? null, last: dates[dates.length - 1] ?? null };
+  }).filter((r) => r.count > 0);
+  return (
+    <section className="mb-3 rounded-xl bg-sunk p-4 dark:bg-accent/60">
+      <h3 className="mb-1 text-[13px] font-semibold text-muted-foreground">Messages by stage</h3>
+      <p className="mb-3 text-xs text-muted-foreground">Clients run several threads at once, so stages overlap in time. Counts cover every conversation.</p>
+      {rows.length === 0 ? <p className="text-sm text-muted-foreground">No staged messages.</p> : (
+        <ul className="flex flex-col gap-1.5">
+          {rows.map((r) => (
+            <li key={r.k} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-card px-3 py-2.5 text-sm">
+              <Pill tone={EVENT[r.k].tone}>{EVENT[r.k].label}</Pill>
+              <span className="font-semibold tabular-nums">{r.count}</span>
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums">{r.first === r.last ? day(r.first) : `${day(r.first)} to ${day(r.last)}`}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {current && <p className="mt-3 text-xs text-muted-foreground">Furthest stage reached: <b className="text-foreground">{STAGE_LABEL[current]}</b></p>}
+    </section>
   );
 }
