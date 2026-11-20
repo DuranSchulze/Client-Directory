@@ -2,13 +2,13 @@
 
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, CircleCheck, FileSpreadsheet, TriangleAlert, Upload } from "lucide-react";
+import { ArrowRightLeft, ChevronRight, CircleCheck, FileSpreadsheet, TriangleAlert, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MasterUploadNote } from "@/components/shared/master-upload-note";
 import { PageHeader } from "@/components/shared/page-header";
 import { errorMessage, request } from "@/lib/api/http";
-import { keys, masterUploadQuery } from "@/lib/api/queries";
+import { companiesQuery, keys, masterUploadQuery, meQuery } from "@/lib/api/queries";
 import type { ImportBuckets, ImportCommitResponse, ImportPreview, ImportPreviewResponse, ImportResult } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,12 @@ export function ImportView() {
 function ImportBody({ step, setStep }: { step: Step; setStep: (s: Step) => void }) {
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
+  const { data: me } = useQuery(meQuery);
+  // Names only for users who may read the client list; others see client numbers.
+  const canDirectory = !!me?.routes.includes("directory");
+  const { data: companies } = useQuery({ ...companiesQuery, enabled: step.kind === "preview" && canDirectory });
+  // Re-check the grant here too: a revoked grant still leaves company names in the cache.
+  const clientName = (id: number | null) => id === null ? "a department mailbox" : id < 0 ? "a new client from this sheet" : (canDirectory && companies?.find((c) => c.id === id)?.name) || `client #${id}`;
   const [drag, setDrag] = useState(false);
 
   async function check(file: File) {
@@ -112,6 +118,23 @@ function ImportBody({ step, setStep }: { step: Step; setStep: (s: Step) => void 
             </tbody>
           </table>
         </div>
+        {step.kind !== "done" && step.preview.moves.length > 0 && (
+          <details open={step.preview.moves.length <= 20} className="group rounded-xl bg-[color-mix(in_srgb,var(--info)_10%,var(--sunk))]">
+            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <ChevronRight aria-hidden className="size-4 transition-transform group-open:rotate-90" />
+              <ArrowRightLeft aria-hidden className="size-4 text-info" />Emails moved off auto-added contacts
+              <span className="ml-auto rounded-full bg-accent px-2 text-xs tabular-nums">{step.preview.moves.length}</span>
+            </summary>
+            <div className="px-3 pb-3">
+              <p className="mb-2 text-xs text-muted-foreground">The sheet wins: these addresses leave the contact the Scraper match added and go where the sheet puts them.</p>
+              <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto text-[13px]">
+                {step.preview.moves.map((m) => (
+                  <li key={`${m.email}-${m.fromCompanyId}`} className="min-w-0 break-words"><span className="font-semibold">{m.email}</span> <span className="text-muted-foreground">from {clientName(m.fromCompanyId)} to {clientName(m.toCompanyId)}</span></li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        )}
         <div className="flex flex-col gap-1.5">
           {BUCKETS.map((b) => {
             const items = summary.buckets[b.key];
