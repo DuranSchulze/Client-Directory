@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MasterUploadNote } from "@/components/shared/master-upload-note";
 import { PageHeader } from "@/components/shared/page-header";
-import { errorMessage, request } from "@/lib/api/http";
+import { ApiError, errorMessage, request } from "@/lib/api/http";
 import { companiesQuery, keys, masterUploadQuery, meQuery } from "@/lib/api/queries";
 import type { ImportBuckets, ImportCommitResponse, ImportPreview, ImportPreviewResponse, ImportResult } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
@@ -49,7 +49,7 @@ function ImportBody({ step, setStep }: { step: Step; setStep: (s: Step) => void 
   const canDirectory = !!me?.routes.includes("directory");
   const { data: companies } = useQuery({ ...companiesQuery, enabled: step.kind === "preview" && canDirectory });
   // Re-check the grant here too: a revoked grant still leaves company names in the cache.
-  const clientName = (id: number | null) => id === null ? "a department mailbox" : id < 0 ? "a new client from this sheet" : (canDirectory && companies?.find((c) => c.id === id)?.name) || `client #${id}`;
+  const clientName = (id: number) => (canDirectory && companies?.find((c) => c.id === id)?.name) || `client #${id}`;
   const [drag, setDrag] = useState(false);
 
   async function check(file: File) {
@@ -63,13 +63,18 @@ function ImportBody({ step, setStep }: { step: Step; setStep: (s: Step) => void 
   }
   async function commit(file: File, preview: ImportPreview) {
     setStep({ kind: "committing", file, preview });
-    const body = new FormData(); body.set("file", file);
+    const body = new FormData(); body.set("file", file); body.set("movesKey", preview.movesKey);
     try {
       const r = await request<ImportCommitResponse>("/api/import/xlsx", { body });
       await Promise.all([keys.companies, keys.counts, keys.probity, keys.suppliers, keys.deptEmails, keys.needsCompany, keys.masterUpload].map((queryKey) => qc.invalidateQueries({ queryKey })));
       toast.success("Import saved");
       setStep({ kind: "done", result: r.result });
-    } catch (e) { toast.error(errorMessage(e)); setStep({ kind: "preview", file, preview }); }
+    } catch (e) {
+      // The moves changed since this preview (an automatic match ran): show the fresh one to review again.
+      const fresh = e instanceof ApiError && e.status === 409 && e.field === "moves" ? (e.body as { preview?: ImportPreview } | undefined)?.preview : undefined;
+      toast.error(errorMessage(e));
+      setStep({ kind: "preview", file, preview: fresh ?? preview });
+    }
   }
 
   if (step.kind === "pick" || step.kind === "checking") {
@@ -129,7 +134,7 @@ function ImportBody({ step, setStep }: { step: Step; setStep: (s: Step) => void 
               <p className="mb-2 text-xs text-muted-foreground">The sheet wins: these addresses leave the contact the Scraper match added and go where the sheet puts them.</p>
               <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto text-[13px]">
                 {step.preview.moves.map((m) => (
-                  <li key={`${m.email}-${m.fromCompanyId}`} className="min-w-0 break-words"><span className="font-semibold">{m.email}</span> <span className="text-muted-foreground">from {clientName(m.fromCompanyId)} to {clientName(m.toCompanyId)}</span></li>
+                  <li key={`${m.email}-${m.fromCompanyId}`} className="min-w-0 break-words"><span className="font-semibold">{m.email}</span> <span className="text-muted-foreground">from {clientName(m.fromCompanyId)} to {m.toLabel}{m.toCompanyId === null ? " (department mailbox)" : m.toCompanyId < 0 ? " (new client)" : ""}{m.toSource && <> · {m.toSource.sheet} row {m.toSource.row}</>}</span></li>
                 ))}
               </ul>
             </div>

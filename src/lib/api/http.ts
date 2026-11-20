@@ -2,7 +2,7 @@ import type { ApiError as ApiErrorBody } from "@/lib/api-types";
 
 /** Error carrying the HTTP status and, for validation errors, the field the server rejected. */
 export class ApiError extends Error {
-  constructor(message: string, public status: number, public field?: string) { super(message); }
+  constructor(message: string, public status: number, public field?: string, public body?: unknown) { super(message); }
 }
 
 export async function request<T>(path: string, opts?: { method?: string; json?: unknown; body?: BodyInit; fallback?: string }): Promise<T> {
@@ -18,7 +18,7 @@ export async function request<T>(path: string, opts?: { method?: string; json?: 
   }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as ApiErrorBody | null;
-    throw new ApiError(body?.error ?? opts?.fallback ?? `Request failed (${res.status})`, res.status, body?.field);
+    throw new ApiError(body?.error ?? opts?.fallback ?? `Request failed (${res.status})`, res.status, body?.field, body);
   }
   return res.json() as Promise<T>;
 }

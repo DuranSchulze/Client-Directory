@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 // Candidate fixtures replace reads only; integration tests never write Scraper tables.
-vi.mock("@/lib/auth/guard", () => ({ requireRouteAccess: async () => ({ email: "integration@example.test" }) }));
+vi.mock("@/lib/auth/guard", () => ({ requireSession: async () => ({ userId: 1 }), requireRouteAccess: async () => ({ email: "integration@example.test" }) }));
 describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic distribution transactions", () => {
   const companyIds: number[] = [];
   const files: string[] = [];
@@ -97,7 +97,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic distribution transact
     })).rejects.toThrow("Rollback guard holder");
     expect((await distributeMatches()).added).toBe(1);
   }, 60000);
-  it("requires review of a move created by distribution, then applies it atomically", async () => {
+  it("returns a fresh preview with HTTP 409 for a move created by distribution, then applies it atomically", async () => {
     const { first, second, email } = await fixtures();
     const { distributeMatches } = await import("@/services/distribute.service");
     const { listContacts } = await import("@/repositories/contacts.repository");
@@ -105,25 +105,36 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic distribution transact
     XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["REGISTERED NAME", "EMAIL ADDRESS"], [second.name, email]]), "All Clients Database");
     const buffer = XLSX.write(book, { type: "buffer", bookType: "xlsx" });
     const file = `${randomUUID()}.xlsx`; files.push(file);
-    const { importWorkbook } = await import("@/services/import.service");
-    const original = await importWorkbook(buffer, true, "integration@example.test", file);
-    expect(original).toMatchObject({ preview: { movesKey: "" } });
+    const { POST } = await import("@/app/api/import/xlsx/route");
+    const repo = await import("@/repositories/import.repository");
+    const logUpload = vi.spyOn(repo, "insertMasterUpload");
+    const upload = (movesKey?: string) => {
+      const body = new FormData();
+      body.set("file", new File([new Uint8Array(buffer)], file));
+      if (movesKey === undefined) body.set("check", "1");
+      else body.set("movesKey", movesKey);
+      return POST(new Request("http://localhost/api/import/xlsx", { method: "POST", body }));
+    };
+    const original = await upload();
+    expect(original.status).toBe(200);
+    expect(await original.json()).toMatchObject({ preview: { movesKey: "" } });
     expect((await distributeMatches()).added).toBe(1);
     vi.stubEnv("AUTO_DISTRIBUTE", "");
     const auto = (await listContacts(first.id)).find((row) => row.emails.includes(email))!;
-    const stale = await importWorkbook(buffer, false, "integration@example.test", file, "");
-    expect(stale).toMatchObject({ movesChanged: true, preview: { moves: [{ email, fromCompanyId: first.id, toLabel: second.name }] } });
+    const conflict = await upload("");
+    expect(conflict.status).toBe(409);
+    const stale = await conflict.json() as { field: string; preview: { movesKey: string } };
+    expect(stale).toMatchObject({ field: "moves", preview: { moves: [{ email, fromCompanyId: first.id, toLabel: second.name }] } });
+    expect(logUpload).not.toHaveBeenCalled();
     expect((await listContacts(first.id)).find((row) => row.id === auto.id)?.emails).toContain(email);
     expect((await listContacts(second.id)).some((row) => row.emails.includes(email))).toBe(false);
-    if (!("movesChanged" in stale)) throw new Error("Expected refreshed preview");
     const reviewed = stale.preview.movesKey;
     expect(reviewed).toMatch(/^[a-f0-9]{64}$/);
-    const repo = await import("@/repositories/import.repository");
-    vi.spyOn(repo, "insertMasterUpload").mockRejectedValueOnce(new Error("Late failure"));
-    await expect(importWorkbook(buffer, false, "integration@example.test", file, reviewed)).rejects.toThrow("Late failure");
+    logUpload.mockRejectedValueOnce(new Error("Late failure"));
+    expect((await upload(reviewed)).status).toBe(500);
     expect((await listContacts(first.id)).find((row) => row.id === auto.id)?.emails).toContain(email);
     expect((await listContacts(second.id)).some((row) => row.emails.includes(email))).toBe(false);
-    await importWorkbook(buffer, false, "integration@example.test", file, reviewed);
+    expect((await upload(reviewed)).status).toBe(200);
     expect((await listContacts(first.id)).some((row) => row.id === auto.id)).toBe(false);
     expect((await listContacts(second.id)).find((row) => row.emails.includes(email))?.source).toBeNull();
   }, 60000);
