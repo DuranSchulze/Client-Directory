@@ -165,3 +165,30 @@ it.each([{ remaining: ["keep@other.test"] }, { remaining: [] }])("applies Excel 
   else expect(m.deleteContact).toHaveBeenCalledWith(8, { transaction: true });
   expect(changed.mock.invocationCallOrder[0]).toBeLessThan(m.contacts.mock.invocationCallOrder[0]);
 });
+
+it("returns a fresh preview without writes when distribution creates an unreviewed move", async () => {
+  vi.stubEnv("AUTO_DISTRIBUTE", "1");
+  const { importWorkbook } = await import("@/services/import.service");
+  const data = workbook();
+  const preview = await importWorkbook(data, true, "admin@example.test", "synthetic.xlsx");
+  if (!("preview" in preview)) throw new Error("Expected import preview");
+  expect(preview.preview.movesKey).toBe("");
+  m.snapshot.mockResolvedValue({ companies: [], contacts: [{ id: 8, companyId: 99, emails: ["client@example.test"], source: "scraper", billingRole: "cc" }], deptEmails: [], suppliers: [], probity: [] });
+
+  const stale = await importWorkbook(data, false, "admin@example.test", "synthetic.xlsx", preview.preview.movesKey);
+  expect(stale).toMatchObject({ movesChanged: true, preview: { moves: [{ email: "client@example.test", fromCompanyId: 99, toLabel: "Acme" }] } });
+  expect(m.lock).toHaveBeenCalledTimes(1);
+  expect(m.trace).toEqual(["snapshot", "lock"]);
+  expect(m.updateContact).not.toHaveBeenCalled();
+  expect(m.deleteContact).not.toHaveBeenCalled();
+  expect(m.log).not.toHaveBeenCalled();
+  expect(m.afterResponse).not.toHaveBeenCalled();
+
+  if (!("movesChanged" in stale)) throw new Error("Expected refreshed preview");
+  const reviewedKey = stale.preview.movesKey;
+  expect(reviewedKey).toMatch(/^[a-f0-9]{64}$/);
+  const confirmed = await importWorkbook(data, false, "admin@example.test", "synthetic.xlsx", reviewedKey);
+  expect(confirmed).toHaveProperty("result");
+  expect(m.deleteContact).toHaveBeenCalledTimes(1);
+  expect(m.log).toHaveBeenCalledTimes(1);
+});

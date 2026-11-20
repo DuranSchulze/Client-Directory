@@ -14,6 +14,11 @@ export const GET = handle(async () => {
 export const POST = handle(async (request: Request) => {
   await requireSession();
   const user = await requireRouteAccess("import");
-  const { data, check, fileName } = await readUpload(request);
-  return Response.json(await importWorkbook(data, check, user.email, fileName), { headers: { "Cache-Control": "no-store" } });
+  const { data, check, fileName, movesKey } = await readUpload(request);
+  const result = await importWorkbook(data, check, user.email, fileName, movesKey);
+  const headers = { "Cache-Control": "no-store" };
+  if ("movesChanged" in result) {
+    return Response.json({ error: "The email moves changed since your preview. Review them again.", field: "moves", preview: result.preview }, { status: 409, headers });
+  }
+  return Response.json(result, { headers });
 });

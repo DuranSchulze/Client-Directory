@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { CompanyInsert, CompanyRow } from "@/db/schema/companies";
 import type { ContactRow } from "@/db/schema/contacts";
 import type { DeptEmailRow } from "@/db/schema/dept-emails";
@@ -44,14 +45,14 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
   const contactUpdates = new Map<number, string[]>();
   const moves: ImportPreview["moves"] = [];
   const reclaimed = new Set<string>();
-  const reclaim = (email: string, target: number | null) => {
+  const reclaim = (email: string, target: number | null, toLabel: string, { sheet, row: sourceRow }: Source) => {
     const holders = snapshot.contacts.filter((row) => row.emails.some((e) => lower(e) === email));
     if (reclaimed.has(email) || !holders.length || holders.some((row) => row.source !== "scraper" || row.companyId === target)) return "conflict";
     if (holders.some((row) => row.billingRole === "main" && (contactUpdates.get(row.id) ?? row.emails).every((e) => lower(e) === email))) return "main";
     reclaimed.add(email);
     for (const row of holders) {
       contactUpdates.set(row.id, (contactUpdates.get(row.id) ?? row.emails).filter((e) => lower(e) !== email));
-      if (!moves.some((move) => move.email === email && move.fromCompanyId === row.companyId)) moves.push({ email, fromCompanyId: row.companyId, toCompanyId: target });
+      if (!moves.some((move) => move.email === email && move.fromCompanyId === row.companyId)) moves.push({ email, fromCompanyId: row.companyId, toCompanyId: target, toLabel, toSource: { sheet, row: sourceRow } });
     }
     owners.delete(email);
     return "moved";
@@ -71,7 +72,8 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
       const owner = deptOwned.get(lower(email));
       if (owner !== undefined && owner !== old?.id) { flag("internalEmails", source, "Department email already belongs to another mailbox; address skipped", "emails"); return false; }
       if (owners.has(lower(email))) {
-        const outcome = reclaim(lower(email), null);
+        const label = incoming.name ? `${incoming.department} · ${incoming.name}` : incoming.department;
+        const outcome = reclaim(lower(email), null, label, source);
         if (outcome !== "moved") {
           flag("internalEmails", source, outcome === "main" ? mainConflict : "Department email already belongs to a client; address skipped", "emails");
           return false;
@@ -140,7 +142,7 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
         const owner = owners.get(email);
         if (owner === current!.id) return false;
         if (owner !== undefined) {
-          const outcome = reclaim(email, current!.id);
+          const outcome = reclaim(email, current!.id, input.name, source);
           if (outcome !== "moved") {
             flag("sharedEmails", source, outcome === "main" ? mainConflict : "Email already belongs to another client; later occurrence skipped", "emails");
             return false;
@@ -176,7 +178,9 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
   }
   const writes = <T>(map: Map<number, T>): Write<T>[] => [...map].map(([id, values]) => ({ id, values }));
   const plan = { contactUpdates: [...contactUpdates].map(([id, emails]) => ({ id, emails })), companies: writes(companyWrites), contacts, deptEmails: writes(deptWrites), suppliers: writes(supplierWrites), probity: writes(probityWrites) };
+  const moveTriples = moves.map(({ email, fromCompanyId, toLabel }) => JSON.stringify([email, fromCompanyId, toLabel])).sort();
+  const movesKey = moves.length ? createHash("sha256").update(`[${moveTriples.join(",")}]`).digest("hex") : "";
   const count = (rows: { id: number }[]) => ({ inserted: rows.filter((row) => row.id < 0).length, updated: rows.filter((row) => row.id > 0).length });
   return { ...plan, preview: { rows: { companies: parsed.companies.length, contacts: parsed.companies.reduce((n, row) => n + row.contacts.length, 0), suppliers: parsed.suppliers.length, deptEmails: parsed.deptEmails.length, probity: parsed.probity.length }, companies: spellings.size,
-    changes: { companies: count(plan.companies), contacts: { inserted: contacts.length, updated: contactUpdates.size }, suppliers: count(plan.suppliers), deptEmails: count(plan.deptEmails), probity: count(plan.probity) }, moves, buckets, probity: matches } };
+    changes: { companies: count(plan.companies), contacts: { inserted: contacts.length, updated: contactUpdates.size }, suppliers: count(plan.suppliers), deptEmails: count(plan.deptEmails), probity: count(plan.probity) }, moves, movesKey, buckets, probity: matches } };
 }

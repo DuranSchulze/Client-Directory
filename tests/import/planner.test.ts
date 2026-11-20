@@ -122,7 +122,7 @@ it("moves only scraper-owned emails, retains other addresses, and reports moves 
   expect(plan.contactUpdates).toEqual([{ id: 1, emails: ["stay@other.test"] }]);
   expect(plan.contacts).toHaveLength(1);
   expect(plan.contacts[0]).toMatchObject({ companyId: 1, emails: ["move@acme.test"] });
-  expect(plan.preview.moves).toEqual([{ email: "move@acme.test", fromCompanyId: 2, toCompanyId: 1 }]);
+  expect(plan.preview.moves).toEqual([{ email: "move@acme.test", fromCompanyId: 2, toCompanyId: 1, toLabel: "Acme", toSource: { sheet: "All Clients Database", row: 2 } }]);
   expect(plan.preview.changes.contacts).toEqual({ inserted: 1, updated: 1 });
   expect(plan.preview.buckets.sharedEmails).toHaveLength(1);
   expect(old.contacts[0].emails).toEqual(["move@acme.test", "stay@other.test"]);
@@ -162,6 +162,25 @@ it("keeps the final address on a promoted auto-added main contact and flags the 
   }), old);
   expect(plan.contactUpdates).toEqual([{ id: 1, emails: ["last@acme.test"] }]);
   expect(plan.contacts).toEqual([]);
-  expect(plan.preview.moves).toEqual([{ email: "first@acme.test", fromCompanyId: 2, toCompanyId: null }]);
+  expect(plan.preview.moves).toEqual([{ email: "first@acme.test", fromCompanyId: 2, toCompanyId: null, toLabel: "Legal · Staff", toSource: { sheet: "All Dept. Emails", row: 2 } }]);
   expect(plan.preview.buckets.sharedEmails[0]?.reason).toMatch(/Make another contact main/);
+});
+
+it("distinguishes workbook destinations and gives the same move set a stable key", () => {
+  const old = snapshot();
+  old.contacts = [{ id: 1, companyId: 2, name: null, designation: null, emails: ["a@acme.test", "b@acme.test", "c@acme.test", "d@acme.test"], phones: [], billingRole: "cc", source: "scraper", updatedAt: new Date() }];
+  const clients = [["REGISTERED NAME", "EMAIL ADDRESS"], ["Alpha", "a@acme.test"], ["Beta", "b@acme.test"]];
+  const dept = [["Department", "Name", "Email Address"], ["Legal", "Staff", "c@acme.test"], ["Legal", "Intake", "d@acme.test"]];
+  const parsed = parse({ "All Clients Database": clients, "All Dept. Emails": dept });
+  const { preview } = planImport(parsed, old);
+  expect(preview.moves.map(({ toLabel, toSource }) => [toLabel, toSource])).toEqual([
+    ["Legal · Staff", { sheet: "All Dept. Emails", row: 2 }],
+    ["Legal · Intake", { sheet: "All Dept. Emails", row: 3 }],
+    ["Alpha", { sheet: "All Clients Database", row: 2 }],
+    ["Beta", { sheet: "All Clients Database", row: 3 }],
+  ]);
+  expect(preview.movesKey).toMatch(/^[a-f0-9]{64}$/);
+  const reordered = parse({ "All Clients Database": [clients[0], clients[2], clients[1]], "All Dept. Emails": [dept[0], dept[2], dept[1]] });
+  expect(planImport(reordered, old).preview.movesKey).toBe(preview.movesKey);
+  expect(planImport(parsed, snapshot()).preview.movesKey).toBe("");
 });

@@ -1,7 +1,7 @@
 import { AppError } from "@/lib/errors";
 import { IMPORT_LIMITS } from "./contract";
 
-export async function readUpload(request: Request): Promise<{ data: Buffer; check: boolean; fileName: string }> {
+export async function readUpload(request: Request): Promise<{ data: Buffer; check: boolean; fileName: string; movesKey?: string }> {
   const length = request.headers.get("content-length");
   if (length && /^\d+$/.test(length) && Number(length) > IMPORT_LIMITS.bytes) throw new AppError(413, "Upload exceeds 10 MB");
   if (!request.body) throw new AppError(400, "Expected a multipart workbook upload");
@@ -23,5 +23,7 @@ export async function readUpload(request: Request): Promise<{ data: Buffer; chec
   const file = form.get("file");
   if (!(file instanceof File)) throw new AppError(400, "Choose an .xlsx file", "file");
   if (form.getAll("file").length !== 1) throw new AppError(400, "Choose one .xlsx file", "file");
-  return { fileName: file.name, data: Buffer.from(await file.arrayBuffer()), check: form.get("check") === "1" || new URL(request.url).searchParams.get("check") === "1" };
+  const movesKey = form.get("movesKey");
+  if (movesKey !== null && (typeof movesKey !== "string" || movesKey.length > 128)) throw new AppError(400, "Invalid email moves key", "movesKey");
+  return { movesKey: movesKey ?? undefined, fileName: file.name, data: Buffer.from(await file.arrayBuffer()), check: form.get("check") === "1" || new URL(request.url).searchParams.get("check") === "1" };
 }

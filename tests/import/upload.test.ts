@@ -13,10 +13,11 @@ beforeEach(() => {
   m.importWorkbook.mockResolvedValue({ preview: { companies: 1 } });
 });
 afterEach(() => vi.unstubAllEnvs());
-function multipart(check?: string): Request {
+function multipart(check?: string, movesKey?: string | File): Request {
   const form = new FormData();
   form.set("file", new File([new Uint8Array([1, 2, 3])], "synthetic.xlsx"));
   if (check) form.set("check", check);
+  if (movesKey !== undefined) form.set("movesKey", movesKey);
   return new Request("http://localhost/api/import/xlsx", { method: "POST", body: form });
 }
 it("reads a multipart file and the dry-run flag", async () => {
@@ -43,7 +44,33 @@ it("guards the route before reading uploads and preserves the response contract"
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.json()).toEqual({ preview: { companies: 1 } });
-  expect(m.importWorkbook).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), true, "admin@example.test", "synthetic.xlsx");
+  expect(m.importWorkbook).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), true, "admin@example.test", "synthetic.xlsx", undefined);
   const oversized = await POST(new Request("http://localhost/api/import/xlsx", { method: "POST", headers: { "content-length": String(IMPORT_LIMITS.bytes + 1) }, body: "x" }));
   expect(oversized.status).toBe(413);
+});
+
+it("preserves absent and empty move keys and accepts a key of up to 128 characters", async () => {
+  expect((await readUpload(multipart())).movesKey).toBeUndefined();
+  expect((await readUpload(multipart(undefined, ""))).movesKey).toBe("");
+  const key = "a".repeat(128);
+  expect((await readUpload(multipart(undefined, key))).movesKey).toBe(key);
+});
+it("rejects oversized and file-valued move keys before running the import", async () => {
+  const { POST } = await import("@/app/api/import/xlsx/route");
+  for (const key of ["a".repeat(129), new File(["value"], "key.txt")]) {
+    const response = await POST(multipart(undefined, key));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ field: "movesKey" });
+  }
+  expect(m.importWorkbook).not.toHaveBeenCalled();
+});
+it("forwards an empty reviewed key and returns the new preview as a 409 conflict", async () => {
+  const { POST } = await import("@/app/api/import/xlsx/route");
+  const preview = { movesKey: "a".repeat(64), moves: [{ email: "client@example.test", toLabel: "Acme" }] };
+  m.importWorkbook.mockResolvedValueOnce({ movesChanged: true, preview });
+  const response = await POST(multipart(undefined, ""));
+  expect(m.importWorkbook).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), false, "admin@example.test", "synthetic.xlsx", "");
+  expect(response.status).toBe(409);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(await response.json()).toEqual({ error: "The email moves changed since your preview. Review them again.", field: "moves", preview });
 });

@@ -11,7 +11,7 @@ it("authorizes import with its own grant before reading or writing a workbook", 
   m.upload.mockResolvedValue({ data: Buffer.from("synthetic"), check: true, fileName: "synthetic.xlsx" }); m.commit.mockResolvedValue({ preview: {} });
   expect((await POST(new Request("https://example.test/api/import/xlsx", { method: "POST" }))).status).toBe(200);
   expect(m.grant).toHaveBeenCalledWith("import");
-  expect(m.commit).toHaveBeenCalledWith(Buffer.from("synthetic"), true, "importer@example.test", "synthetic.xlsx");
+  expect(m.commit).toHaveBeenCalledWith(Buffer.from("synthetic"), true, "importer@example.test", "synthetic.xlsx", undefined);
   m.grant.mockRejectedValueOnce(new AppError(403, "You don't have access to this page")); m.upload.mockClear(); m.commit.mockClear();
   expect((await POST(new Request("https://example.test/api/import/xlsx", { method: "POST" }))).status).toBe(403);
   expect(m.upload).not.toHaveBeenCalled(); expect(m.commit).not.toHaveBeenCalled();
