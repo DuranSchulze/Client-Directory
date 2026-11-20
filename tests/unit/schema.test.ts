@@ -19,8 +19,8 @@ it("declares both concurrency guards with the intended expressions and predicate
   expect(main.unique).toBe(true);
   expect(dialect.sqlToQuery(main.where!).sql).toContain("= 'main'");
 });
-it("uses directory roles with a required, non-cascading user FK and an eight-table allowlist", () => {
-  expect(DIRECTORY_TABLES).toHaveLength(8);
+it("uses directory roles with a required, non-cascading user FK and a directory-table allowlist", () => {
+  expect(DIRECTORY_TABLES).toHaveLength(10);
   const roles = getTableConfig(directory_roles_tb), users = getTableConfig(directory_users_tb);
   expect(roles.name).toBe("directory_roles");
   expect(roles.indexes.some((i) => i.config.unique && i.config.name === "uq_directory_roles_name")).toBe(true);

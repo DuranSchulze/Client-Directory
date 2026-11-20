@@ -19,7 +19,7 @@ vi.mock("@/repositories/reveals.repository", () => m);
 vi.mock("@/repositories/candidates.repository", () => ({ listLinkedCandidates: vi.fn().mockResolvedValue([]), findApprovedCandidate: m.findApprovedCandidate }));
 vi.mock("@/repositories/dept-emails.repository", () => m);
 vi.mock("@/lib/auth/guard", () => m);
-const contact = { id: 10, companyId: 1, name: null, designation: null, emails: ["client@example.com"], phones: [], billingRole: "main", updatedAt: new Date() };
+const contact = { id: 10, companyId: 1, name: null, designation: null, emails: ["client@example.com"], phones: [], billingRole: "main", source: null, updatedAt: new Date() };
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("ACCOUNT_NO_KEY", Buffer.alloc(32, 3).toString("base64"));

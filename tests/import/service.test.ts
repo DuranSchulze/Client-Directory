@@ -3,10 +3,10 @@ import * as XLSX from "xlsx";
 import { decryptAccountNo } from "@/lib/crypto/account-no";
 
 const m = vi.hoisted(() => ({
-  transaction: vi.fn(), lock: vi.fn(), snapshot: vi.fn(), companies: vi.fn(), contacts: vi.fn(), dept: vi.fn(), suppliers: vi.fn(), probity: vi.fn(), updateCompany: vi.fn(), updateProbity: vi.fn(), updateSupplier: vi.fn(), refresh: vi.fn(), trace: [] as string[],
+  log: vi.fn(), transaction: vi.fn(), lock: vi.fn(), snapshot: vi.fn(), companies: vi.fn(), contacts: vi.fn(), dept: vi.fn(), suppliers: vi.fn(), probity: vi.fn(), updateCompany: vi.fn(), updateProbity: vi.fn(), updateSupplier: vi.fn(), refresh: vi.fn(), trace: [] as string[],
 }));
 vi.mock("@/db", () => ({ db: {}, withTransaction: m.transaction }));
-vi.mock("@/repositories/import.repository", () => ({ readImportSnapshot: m.snapshot, insertImportCompanies: m.companies, insertImportContacts: m.contacts, insertImportDeptEmails: m.dept, insertImportSuppliers: m.suppliers, insertImportProbity: m.probity, updateImportCompany: m.updateCompany, updateImportProbity: m.updateProbity, updateImportSupplier: m.updateSupplier }));
+vi.mock("@/repositories/import.repository", () => ({ insertMasterUpload: m.log, readImportSnapshot: m.snapshot, insertImportCompanies: m.companies, insertImportContacts: m.contacts, insertImportDeptEmails: m.dept, insertImportSuppliers: m.suppliers, insertImportProbity: m.probity, updateImportCompany: m.updateCompany, updateImportProbity: m.updateProbity, updateImportSupplier: m.updateSupplier }));
 vi.mock("@/repositories/ownership.repository", () => ({ lockEmailOwnership: m.lock }));
 vi.mock("@/services/probity.service", () => ({ refreshProbityMatches: m.refresh }));
 beforeEach(() => {
@@ -30,9 +30,10 @@ function workbook(accountNo: unknown = "000123456"): Buffer {
 }
 it("dry-run writes nothing and never includes a bank number in the preview", async () => {
   const { importWorkbook } = await import("@/services/import.service");
-  const response = await importWorkbook(workbook(), true, "admin@example.test");
+  const response = await importWorkbook(workbook(), true, "admin@example.test", "synthetic.xlsx");
   expect(response).toHaveProperty("preview");
   expect(JSON.stringify(response)).not.toContain("000123456");
+  expect(m.log).not.toHaveBeenCalled();
   expect(m.transaction).not.toHaveBeenCalled();
   expect(m.companies).not.toHaveBeenCalled();
   expect(m.contacts).not.toHaveBeenCalled();
@@ -41,7 +42,7 @@ it("uses import-only guarded updates for existing companies and probity", async 
   m.snapshot.mockResolvedValue({ companies: [{ id: 5, name: "Acme", nameKey: "acme", type: "Non-individual", entities: [], isNew: false, accountNo: null }], contacts: [], deptEmails: [], suppliers: [],
     probity: [{ id: 6, companyListed: "Acme", referenceNo: "R1", draftedOn: null, emails: [], companyId: null, matchedBy: null, service: null }] });
   const { importWorkbook } = await import("@/services/import.service");
-  await importWorkbook(workbook("12-3"), false, "admin@example.test");
+  await importWorkbook(workbook("12-3"), false, "admin@example.test", "synthetic.xlsx");
   expect(m.companies).not.toHaveBeenCalled();
   expect(m.updateCompany).toHaveBeenCalledWith(5, expect.objectContaining({ accountNoLast4: "123" }), { transaction: true });
   expect(decryptAccountNo(m.updateCompany.mock.calls[0][1].accountNo)).toBe("12-3");
@@ -49,15 +50,15 @@ it("uses import-only guarded updates for existing companies and probity", async 
 });
 it.each(["N/A", "na", "-", "tBd", "#REF!", "no digits"])("drops and flags invalid imported account %s in preview and commit", async (value) => {
   const { importWorkbook } = await import("@/services/import.service");
-  const preview = await importWorkbook(workbook(value), true, "admin@example.test");
+  const preview = await importWorkbook(workbook(value), true, "admin@example.test", "synthetic.xlsx");
   expect("preview" in preview && preview.preview.buckets.invalidValues).toEqual([expect.objectContaining({ field: "accountNo" })]);
-  const result = await importWorkbook(workbook(value), false, "admin@example.test");
+  const result = await importWorkbook(workbook(value), false, "admin@example.test", "synthetic.xlsx");
   expect("result" in result && result.result.buckets.invalidValues).toEqual([expect.objectContaining({ field: "accountNo" })]);
   expect(m.companies.mock.calls[0][0][0]).toMatchObject({ accountNo: null, accountNoLast4: null });
 });
 it.each([[" 12-345 (67) ", "12-345 (67)", "4567"], ["1-2", "1-2", "12"], [" ", null, null], [null, null, null]])("normalizes imported account %s without encrypting blanks", async (value, normalized, last4) => {
   const { importWorkbook } = await import("@/services/import.service");
-  const result = await importWorkbook(workbook(value), false, "admin@example.test");
+  const result = await importWorkbook(workbook(value), false, "admin@example.test", "synthetic.xlsx");
   const stored = m.companies.mock.calls[0][0][0];
   expect(stored.accountNoLast4).toBe(last4);
   expect(stored.accountNo ? decryptAccountNo(stored.accountNo) : null).toBe(normalized);
@@ -65,7 +66,7 @@ it.each([[" 12-345 (67) ", "12-345 (67)", "4567"], ["1-2", "1-2", "12"], [" ", n
 });
 it("locks before replanning, writes in order, encrypts bank numbers and uses the transaction throughout", async () => {
   const { importWorkbook } = await import("@/services/import.service");
-  const response = await importWorkbook(workbook(), false, "admin@example.test");
+  const response = await importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx");
   expect(m.trace).toEqual(["lock", "snapshot", "dept", "suppliers", "companies", "contacts", "probity", "refresh"]);
   expect(m.companies.mock.calls[0][0][0].accountNo).not.toBe("000123456");
   expect(decryptAccountNo(m.companies.mock.calls[0][0][0].accountNo)).toBe("000123456");
@@ -76,25 +77,26 @@ it("locks before replanning, writes in order, encrypts bank numbers and uses the
 });
 it("revalidates ownership from current database state at commit", async () => {
   const { importWorkbook } = await import("@/services/import.service");
-  await importWorkbook(workbook(), true, "admin@example.test");
+  await importWorkbook(workbook(), true, "admin@example.test", "synthetic.xlsx");
   m.snapshot.mockResolvedValueOnce({ companies: [], contacts: [{ id: 1, companyId: 999, emails: ["client@example.test"], billingRole: "main" }], deptEmails: [], suppliers: [], probity: [] });
-  const response = await importWorkbook(workbook(), false, "admin@example.test");
+  const response = await importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx");
   expect(m.contacts).not.toHaveBeenCalled();
   expect("result" in response ? response.result.buckets.sharedEmails : null).toHaveLength(1);
 });
 it("propagates a late error so withTransaction can roll back", async () => {
   const { importWorkbook } = await import("@/services/import.service");
   m.probity.mockRejectedValueOnce(new Error("Injected late failure"));
-  await expect(importWorkbook(workbook(), false, "admin@example.test")).rejects.toThrow("Injected late failure");
+  await expect(importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx")).rejects.toThrow("Injected late failure");
   expect(m.companies).toHaveBeenCalled();
   expect(m.contacts).toHaveBeenCalled();
   expect(m.refresh).not.toHaveBeenCalled();
+  expect(m.log).not.toHaveBeenCalled();
 });
 it("writes companies and contacts in batches of at most 500", async () => {
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["REGISTERED NAME", "EMAIL ADDRESS"], ...Array.from({ length: 501 }, (_, i) => [`Client ${i}`, `client${i}@example.test`])]), "All Clients Database");
   const { importWorkbook } = await import("@/services/import.service");
-  await importWorkbook(XLSX.write(book, { type: "buffer", bookType: "xlsx" }), false, "admin@example.test");
+  await importWorkbook(XLSX.write(book, { type: "buffer", bookType: "xlsx" }), false, "admin@example.test", "synthetic.xlsx");
   expect(m.companies.mock.calls.map(([batch]) => batch.length)).toEqual([500, 1]);
   expect(m.contacts.mock.calls.map(([batch]) => batch.length)).toEqual([500, 1]);
 });
@@ -102,8 +104,19 @@ it("encrypts all digits of a numeric General-format bank account number", async 
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["REGISTERED NAME", "EMAIL ADDRESS", "ACCOUNT NO"], ["Acme", "client@example.test", 123456789012]]), "All Clients Database");
   const { importWorkbook } = await import("@/services/import.service");
-  await importWorkbook(XLSX.write(book, { type: "buffer", bookType: "xlsx" }), false, "admin@example.test");
+  await importWorkbook(XLSX.write(book, { type: "buffer", bookType: "xlsx" }), false, "admin@example.test", "synthetic.xlsx");
   const stored = m.companies.mock.calls[0][0][0];
   expect(decryptAccountNo(stored.accountNo)).toBe("123456789012");
   expect(stored.accountNoLast4).toBe("9012");
+});
+
+it("logs exactly one changes summary using the commit transaction, including empty commits", async () => {
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["REGISTERED NAME", "EMAIL ADDRESS"]]), "All Clients Database");
+  const { importWorkbook } = await import("@/services/import.service");
+  const response = await importWorkbook(XLSX.write(book, { type: "buffer", bookType: "xlsx" }), false, "admin@example.test", "empty.xlsx");
+  if (!("result" in response)) throw new Error("Expected committed import");
+  expect(m.log).toHaveBeenCalledTimes(1);
+  expect(m.log).toHaveBeenCalledWith({ fileName: "empty.xlsx", uploadedBy: "admin@example.test", summary: response.result.changes }, { transaction: true });
+  expect(Object.values(response.result.changes).every((c) => c.inserted === 0 && c.updated === 0)).toBe(true);
 });

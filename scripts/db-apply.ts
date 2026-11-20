@@ -9,7 +9,7 @@ import { DIRECTORY_TABLES } from "../src/db/directory-tables";
 
 type Token = { raw: string; kind: "word" | "identifier" | "string" | "number" | "symbol" };
 export type Column = { name: string; type: string; nullable: boolean };
-type Declaration = { kind: "table" | "index" | "constraint"; name: string; table: string; sql: string; columns: Column[] };
+type Declaration = { kind: "table" | "index" | "constraint" | "column"; name: string; table: string; sql: string; columns: Column[] };
 export type LiveCatalog = {
   tables: { name: string; columns: Column[] }[];
   indexes: { name: string; table: string }[];
@@ -117,6 +117,7 @@ class StatementParser {
     if (this.take("bigserial") || this.take("bigint")) type = "bigint";
     else if (this.take("serial") || this.take("integer")) type = "integer";
     else if (this.take("text")) { type = "text"; if (this.take("[")) { this.expect("]"); type = "text[]"; } }
+    else if (this.take("jsonb")) type = "jsonb";
     else if (this.take("boolean")) type = "boolean";
     else if (this.take("date")) type = "date";
     else if (this.take("timestamp")) { this.expect("with"); this.expect("time"); this.expect("zone"); type = "timestamp with time zone"; }
@@ -171,7 +172,14 @@ class StatementParser {
       }
     } else {
       this.expect("alter"); this.expect("table"); table = this.table();
-      this.expect("add"); this.expect("constraint"); name = this.identifier(); kind = "constraint";
+      this.expect("add");
+      if (this.take("column")) {
+        this.expect("if"); this.expect("not"); this.expect("exists");
+        name = this.identifier(); this.expect("text");
+        if (table !== "contacts" || name !== "source" || this.pos !== this.tokens.length) refuse();
+        return { kind: "column", name, table, columns: [{ name, type: "text", nullable: true }], sql: 'ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS source text;' };
+      }
+      this.expect("constraint"); name = this.identifier(); kind = "constraint";
       if (this.take("foreign")) {
         this.expect("key"); this.columns(); this.expect("references"); this.table(); this.columns();
         const actions = new Set<string>();
@@ -197,16 +205,28 @@ export function validateBatch(statements: readonly string[]): Declaration[] {
 }
 export function planApply(statements: readonly string[], live: LiveCatalog): string[] {
   const declarations = validateBatch(statements);
-  return declarations.filter((item) => {
+  return [...new Set(declarations.filter((item) => {
+    if (item.kind === "column") {
+      const column = live.tables.find((t) => t.name === item.table)?.columns.find((c) => c.name === item.name);
+      if (column && (column.type !== "text" || !column.nullable)) throw new SchemaError("Column drift on public.contacts; write a reviewed manual migration. No schema changes were applied.");
+      // A fresh CREATE already includes source; never issue the same addition twice.
+      return !column && !declarations.some((d) => d.kind === "table" && d.table === item.table && !live.tables.some((t) => t.name === item.table) && d.columns.some((c) => c.name === item.name));
+    }
     if (item.kind === "table") {
       const existing = live.tables.find((t) => t.name === item.name);
       if (!existing) return true;
       const shape = (columns: Column[]) => JSON.stringify([...columns].sort((a, b) => a.name.localeCompare(b.name)).map(({ name, type, nullable }) => [name, type, nullable]));
-      if (shape(existing.columns) !== shape(item.columns)) throw new SchemaError(`Column drift on public.${item.name}; write a reviewed manual migration. No schema changes were applied.`);
+      const missing = item.columns.filter((column) => !existing.columns.some((c) => c.name === column.name));
+      const additive = item.name === "contacts" && missing.length === 1 && missing[0].name === "source" && missing[0].type === "text" && missing[0].nullable;
+      if (shape(existing.columns) !== shape(item.columns)) {
+        if (!additive || shape([...existing.columns, ...missing]) !== shape(item.columns)) throw new SchemaError(`Column drift on public.${item.name}; write a reviewed manual migration. No schema changes were applied.`);
+        item.sql = 'ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS source text;';
+        return true;
+      }
       return false;
     }
     return !(item.kind === "index" ? live.indexes : live.constraints).some((obj) => obj.name === item.name && obj.table === item.table);
-  }).map((item) => item.sql);
+  }).map((item) => item.sql))];
 }
 
 async function readCatalog(client: PoolClient): Promise<LiveCatalog> {

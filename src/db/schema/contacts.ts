@@ -8,6 +8,7 @@ export const contacts_tb = pgTable("contacts", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   companyId: bigint("company_id", { mode: "number" }).notNull(),
   name: text("name"), designation: text("designation"),
+  source: text("source"),
   emails: text("emails").array().notNull().default([]),   // lower-cased on write
   phones: text("phones").array().notNull().default([]),   // E.164 on write
   billingRole: text("billing_role").$type<BillingRole>().notNull().default("none"),

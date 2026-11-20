@@ -19,7 +19,7 @@ function encrypted(values: CompanyInsert): CompanyInsert {
   const account = accountNumber(values.accountNo);
   return { ...values, ...account, accountNo: account.accountNo ? encryptAccountNo(account.accountNo) : null };
 }
-export async function importWorkbook(data: Buffer, check: boolean, userEmail: string) {
+export async function importWorkbook(data: Buffer, check: boolean, userEmail: string, fileName: string) {
   const parsed = parseWorkbook(data);
   for (const row of parsed.companies) {
     try { row.company.accountNo = accountNumber(row.company.accountNo).accountNo; }
@@ -49,6 +49,7 @@ export async function importWorkbook(data: Buffer, check: boolean, userEmail: st
     for (const batch of chunks(plan.probity.filter((row) => row.id > 0))) for (const row of batch) await repo.updateImportProbity(row.id, row.values, tx);
     await refreshProbityMatches(tx);
     const result: ImportResult = { changes: plan.preview.changes, buckets: plan.preview.buckets, probity: plan.preview.probity };
+    await repo.insertMasterUpload({ fileName, uploadedBy: userEmail, summary: result.changes }, tx);
     return { result };
   });
 }

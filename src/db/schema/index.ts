@@ -6,3 +6,5 @@ export * from "./dept-emails";
 export * from "./sensitive-reveals";
 export * from "./directory-users";
 export * from "./directory-roles";
+export * from "./master-uploads";
+export * from "./distribution-suppressions";

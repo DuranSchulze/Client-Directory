@@ -1,7 +1,7 @@
 import "server-only";
 import { db, type Executor } from "@/db";
 import { eq, getTableColumns, Param, sql } from "drizzle-orm";
-import { companies_tb, contacts_tb, dept_emails_tb, suppliers_tb, probity_clients_tb } from "@/db/schema";
+import { master_uploads_tb, companies_tb, contacts_tb, dept_emails_tb, suppliers_tb, probity_clients_tb } from "@/db/schema";
 import { listCompanies } from "./companies.repository";
 import { listContacts } from "./contacts.repository";
 import { listDeptEmails } from "./dept-emails.repository";
@@ -58,3 +58,7 @@ export async function updateImportSupplier(id: number, values: SupplierInput, ex
   await ex.update(suppliers_tb).set({ ...changes, updatedAt: new Date() }).where(eq(suppliers_tb.id, id));
 }
 export async function insertImportProbity(values: (typeof probity_clients_tb.$inferInsert)[], ex: Executor = db) { await ex.insert(probity_clients_tb).values(values); }
+
+export async function insertMasterUpload(values: typeof master_uploads_tb.$inferInsert, ex: Executor = db) {
+  await ex.insert(master_uploads_tb).values(values);
+}

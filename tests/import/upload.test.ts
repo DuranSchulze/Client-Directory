@@ -20,7 +20,7 @@ function multipart(check?: string): Request {
   return new Request("http://localhost/api/import/xlsx", { method: "POST", body: form });
 }
 it("reads a multipart file and the dry-run flag", async () => {
-  expect(await readUpload(multipart("1"))).toEqual({ data: Buffer.from([1, 2, 3]), check: true });
+  expect(await readUpload(multipart("1"))).toEqual({ data: Buffer.from([1, 2, 3]), check: true, fileName: "synthetic.xlsx" });
   expect((await readUpload(multipart())).check).toBe(false);
 });
 it("caps the actual streamed request even if content-length is absent or false", async () => {
@@ -43,7 +43,7 @@ it("guards the route before reading uploads and preserves the response contract"
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.json()).toEqual({ preview: { companies: 1 } });
-  expect(m.importWorkbook).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), true, "admin@example.test");
+  expect(m.importWorkbook).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), true, "admin@example.test", "synthetic.xlsx");
   const oversized = await POST(new Request("http://localhost/api/import/xlsx", { method: "POST", headers: { "content-length": String(IMPORT_LIMITS.bytes + 1) }, body: "x" }));
   expect(oversized.status).toBe(413);
 });

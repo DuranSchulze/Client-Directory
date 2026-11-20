@@ -7,10 +7,11 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("import persistence", () => {
   afterEach(async () => {
     vi.restoreAllMocks(); vi.unstubAllEnvs();
     const { withTransaction } = await import("@/db");
-    const { companies_tb, suppliers_tb, dept_emails_tb, probity_clients_tb } = await import("@/db/schema");
+    const { master_uploads_tb, companies_tb, suppliers_tb, dept_emails_tb, probity_clients_tb } = await import("@/db/schema");
     const { inArray } = await import("drizzle-orm");
     if (!labels.length) return;
     await withTransaction(async (tx) => {
+      await tx.delete(master_uploads_tb).where(inArray(master_uploads_tb.fileName, labels.map((label) => `${label}.xlsx`)));
       await tx.delete(probity_clients_tb).where(inArray(probity_clients_tb.referenceNo, labels));
       await tx.delete(companies_tb).where(inArray(companies_tb.name, labels.map((label) => `Import ${label}`)));
       await tx.delete(suppliers_tb).where(inArray(suppliers_tb.name, labels.map((label) => `Supplier ${label}`)));
@@ -34,11 +35,17 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("import persistence", () => {
     const label = randomUUID(); labels.push(label);
     const { importWorkbook } = await import("@/services/import.service");
     const { readImportSnapshot } = await import("@/repositories/import.repository");
+    const { db } = await import("@/db");
+    const { master_uploads_tb } = await import("@/db/schema");
+    const { eq } = await import("drizzle-orm");
+    const logs = () => db.select().from(master_uploads_tb).where(eq(master_uploads_tb.fileName, `${label}.xlsx`));
     const before = await readImportSnapshot();
-    const preview = await importWorkbook(workbook(label), true, "integration@example.test");
+    const preview = await importWorkbook(workbook(label), true, "integration@example.test", `${label}.xlsx`);
     expect("preview" in preview ? preview.preview.changes.companies.inserted : null).toBe(1);
     expect(await readImportSnapshot()).toEqual(before);
-    await importWorkbook(workbook(label), false, "integration@example.test");
+    expect(await logs()).toEqual([]);
+    await importWorkbook(workbook(label), false, "integration@example.test", `${label}.xlsx`);
+    expect(await logs()).toHaveLength(1);
     const first = await readImportSnapshot();
     const company = first.companies.find((row) => row.name === `Import ${label}`)!;
     const probity = first.probity.find((row) => row.referenceNo === label)!;
@@ -55,9 +62,11 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("import persistence", () => {
       await updateProbity(probity.id, { companyId: company.id, matchedBy: "manual", remarks: "Admin remarks" }, tx);
     });
     const edited = await readImportSnapshot();
-    const second = await importWorkbook(workbook(label), false, "integration@example.test");
+    const second = await importWorkbook(workbook(label), false, "integration@example.test", `${label}.xlsx`);
     expect("result" in second ? second.result.changes : null).toEqual({ companies: { inserted: 0, updated: 0 }, contacts: { inserted: 0, updated: 0 }, suppliers: { inserted: 0, updated: 0 }, deptEmails: { inserted: 0, updated: 0 }, probity: { inserted: 0, updated: 0 } });
     expect(await readImportSnapshot()).toEqual(edited);
+    expect(await logs()).toHaveLength(2);
+    expect((await logs())[1]).toMatchObject({ uploadedBy: "integration@example.test", summary: "result" in second ? second.result.changes : null });
   }, 60000);
   it("rolls every table back after an injected late failure", async () => {
     vi.stubEnv("ACCOUNT_NO_KEY", Buffer.alloc(32, 5).toString("base64"));
@@ -66,24 +75,28 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("import persistence", () => {
     const { importWorkbook } = await import("@/services/import.service");
     const before = await repo.readImportSnapshot();
     vi.spyOn(repo, "insertImportProbity").mockRejectedValueOnce(new Error("Injected late failure"));
-    await expect(importWorkbook(workbook(label), false, "integration@example.test")).rejects.toThrow("Injected late failure");
+    await expect(importWorkbook(workbook(label), false, "integration@example.test", `${label}.xlsx`)).rejects.toThrow("Injected late failure");
     expect(await repo.readImportSnapshot()).toEqual(before);
+    const { db } = await import("@/db");
+    const { master_uploads_tb } = await import("@/db/schema");
+    const { eq } = await import("drizzle-orm");
+    expect(await db.select().from(master_uploads_tb).where(eq(master_uploads_tb.fileName, `${label}.xlsx`))).toEqual([]);
   }, 60000);
   it("appends available named-department addresses while retaining client and other-mailbox ownership, idempotently", async () => {
     vi.stubEnv("ACCOUNT_NO_KEY", Buffer.alloc(32, 5).toString("base64"));
     const label = randomUUID(); labels.push(label);
     const { importWorkbook } = await import("@/services/import.service");
     const { readImportSnapshot } = await import("@/repositories/import.repository");
-    await importWorkbook(workbook(label), false, "integration@example.test");
+    await importWorkbook(workbook(label), false, "integration@example.test", `${label}.xlsx`);
     const before = await readImportSnapshot();
     const staff = before.deptEmails.find((d) => d.department === `Dept ${label}` && d.name === "Staff")!;
     const expanded = workbook(label, `staff@${label}.test, new@${label}.test, shared1@${label}.test, client@${label}.test`);
-    await importWorkbook(expanded, false, "integration@example.test");
+    await importWorkbook(expanded, false, "integration@example.test", `${label}.xlsx`);
     const first = await readImportSnapshot();
     expect(first.deptEmails.find((d) => d.id === staff.id)?.emails).toEqual([`staff@${label}.test`, `new@${label}.test`]);
     expect(first.deptEmails.find((d) => d.department === `Dept ${label}` && !d.name && d.emails.includes(`shared1@${label}.test`))?.emails).toEqual([`shared1@${label}.test`]);
     expect(first.contacts).toEqual(before.contacts);
-    await importWorkbook(expanded, false, "integration@example.test");
+    await importWorkbook(expanded, false, "integration@example.test", `${label}.xlsx`);
     expect(await readImportSnapshot()).toEqual(first);
   }, 60000);
   it("preserves edits committed after a stale companies/probity write plan was constructed", async () => {

@@ -29,7 +29,7 @@ it("merges a named department row's own addresses and new free addresses, across
     { id: 1, department: "Legal", name: "Staff", title: "Admin title", emails: ["a@example.test"], sortOrder: 1 },
     { id: 2, department: "Legal", name: "Other", title: null, emails: ["other@example.test"], sortOrder: 2 },
   ];
-  old.contacts = [{ id: 1, companyId: 99, name: null, designation: null, emails: ["client@example.test"], phones: [], billingRole: "main", updatedAt: new Date() }];
+  old.contacts = [{ id: 1, companyId: 99, name: null, designation: null, emails: ["client@example.test"], phones: [], billingRole: "main", source: null, updatedAt: new Date() }];
   const first = planImport(parsed, old);
   expect(first.deptEmails).toEqual([{ id: 1, values: { department: "Legal", emails: ["a@example.test", "b@example.test", "c@example.test"] } }]);
   expect(first.preview.buckets.internalEmails).toHaveLength(2);
@@ -53,7 +53,7 @@ it("merges spellings, keeps the first email owner and excludes the parsed depart
 it("fills empty fields only, merges entities, preserves admin edits, and never overwrites a manual match", () => {
   const old = snapshot();
   old.companies = [company()];
-  old.contacts = [{ id: 1, companyId: 1, name: "Admin contact", designation: null, emails: ["main@example.test"], phones: [], billingRole: "main", updatedAt: new Date() }];
+  old.contacts = [{ id: 1, companyId: 1, name: "Admin contact", designation: null, emails: ["main@example.test"], phones: [], billingRole: "main", source: null, updatedAt: new Date() }];
   old.probity = [{ id: 1, companyListed: "Acme", companyId: 1, matchedBy: "manual", contactPerson: null, emails: [], service: "Admin service", agreementUrl: null, draftedOn: "2026-01-01", referenceNo: "R1", remarks: "Admin remarks", updatedAt: new Date() }];
   const parsed = parse({ "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS", "INTERCOMPANY", "ENGAGEMENT STATUS", "INDIVIDUAL", "COMPANY'S REGISTERED ADDRESS", "BANK", "ACCOUNT NO"], ["Acme Ltd", "main@example.test", "DDS, FILEPINO", "NEW, ACTIVE", "X", "Sheet address", "New bank", "000111222"]],
     "Probity Clients": [["COMPANY", "Reference Number", "Date Drafted", "Service", "Remarks/Status"], ["Acme", "R1", "2026-01-01", "Sheet service", "Sheet remarks"]] });
@@ -101,7 +101,7 @@ it("checks email before name, then name before not-found in the actual import pl
     "Probity Clients": [["COMPANY", "Reference Number", "Email Address"], ["First", "R1", "OWNER@EXAMPLE.TEST"], ["First", "R2"], ["Unknown", "R3"]] });
   const old = snapshot();
   old.companies = [{ ...company(), id: 1, name: "First", nameKey: "first" }, { ...company(), id: 2, name: "Second", nameKey: "second" }];
-  old.contacts = [{ id: 1, companyId: 2, name: null, designation: null, emails: ["owner@example.test"], phones: [], billingRole: "main", updatedAt: new Date() }];
+  old.contacts = [{ id: 1, companyId: 2, name: null, designation: null, emails: ["owner@example.test"], phones: [], billingRole: "main", source: null, updatedAt: new Date() }];
   const spy = vi.spyOn(matcher, "matchProbity");
   const plan = planImport(parsed, old);
   expect(spy.mock.results.map((result) => result.value)).toEqual([{ companyId: 2, matchedBy: "email" }, { companyId: 1, matchedBy: "name" }, { companyId: null, matchedBy: null }]);

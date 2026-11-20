@@ -190,3 +190,19 @@ describe("runner (no database)", () => {
     expect(mocks.end).toHaveBeenCalledTimes(1);
   });
 });
+
+ it("bootstraps JSONB and upgrades only nullable contacts.source, then becomes a no-op", () => {
+  const sql = batch('CREATE TABLE contacts (id bigint NOT NULL, source text); CREATE TABLE master_uploads (summary jsonb NOT NULL);');
+  expect(planApply(sql, empty)).toHaveLength(2);
+  const live = { ...empty, tables: [{ name: "contacts", columns: [{ name: "id", type: "bigint", nullable: false }] }] };
+  expect(planApply(sql.slice(0, 1), live)).toEqual(['ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS source text;']);
+  live.tables[0].columns.push({ name: "source", type: "text", nullable: true });
+  expect(planApply(sql.slice(0, 1), live)).toEqual([]);
+  live.tables[0].columns[1].nullable = false;
+  expect(() => planApply(sql.slice(0, 1), live)).toThrow(/drift/);
+ });
+ it("accepts only the explicit idempotent source addition", () => {
+  const sql = batch('ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS source text;');
+  expect(planApply(sql, empty)).toEqual(['ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS source text;']);
+  for (const bad of ['ALTER TABLE contacts ADD COLUMN source text;', 'ALTER TABLE companies ADD COLUMN IF NOT EXISTS source text;', 'ALTER TABLE contacts ADD COLUMN IF NOT EXISTS source text NOT NULL;', 'ALTER TABLE contacts ADD COLUMN IF NOT EXISTS source text DEFAULT now();']) expect(() => validateBatch(batch(bad))).toThrow();
+ });

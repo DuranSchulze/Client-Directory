@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ candidates: vi.fn() }));
 vi.mock("@/db", () => ({ db: {} }));
 vi.mock("@/repositories/candidates.repository", () => ({ listUnlinkedCandidates: m.candidates }));
-vi.mock("@/repositories/counts.repository", () => ({ directoryCounts: async () => ({ companies: 3, contacts: 4, probity: 0, probityUnmatched: 0, suppliers: 0, deptEmails: 0 }) }));
+vi.mock("@/repositories/counts.repository", () => ({ lastMasterUpload: async () => null, directoryCounts: async () => ({ companies: 3, contacts: 4, probity: 0, probityUnmatched: 0, suppliers: 0, deptEmails: 0 }) }));
 vi.mock("@/repositories/companies.repository", () => ({ listCompanies: async () => [] }));
 vi.mock("@/repositories/contacts.repository", () => ({ listContacts: async () => [] }));
 vi.mock("@/lib/auth/guard", () => ({ requireSession: async () => ({ userId: 1 }), requireRouteAccess: async () => ({ email: "admin@example.test" }) }));
