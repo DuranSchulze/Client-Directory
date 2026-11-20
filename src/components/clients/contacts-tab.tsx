@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Phone, Plus, Star, Trash2, UserRound } from "lucide-react";
+import { Mail, Phone, Plus, Sparkles, Star, Trash2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -52,6 +52,7 @@ export function ContactsTab({ detail }: { detail: CompanyDetail }) {
                       <span className="font-semibold">{c.name ?? "Unnamed contact"}</span>
                       <span className={cn("rounded-full px-2 py-px text-[11px] font-bold",
                         c.billingRole === "main" ? "bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] text-primary-text" : "bg-accent text-muted-foreground")}>{ROLE_LABEL[c.billingRole]}</span>
+                      {c.source === "scraper" && <span title="Added automatically from a Scraper match on the email domain" className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--info)_16%,transparent)] px-2 py-px text-[11px] font-bold text-info"><Sparkles aria-hidden className="size-3" />Auto-added</span>}
                     </div>
                     {c.designation && <p className="text-xs text-muted-foreground">{c.designation}</p>}
                     <div className="mt-1.5 flex flex-col gap-1 text-sm">
@@ -59,7 +60,7 @@ export function ContactsTab({ detail }: { detail: CompanyDetail }) {
                       {c.phones.map((p) => <a key={p} href={`tel:${p}`} className="link-draw inline-flex w-fit items-center gap-1.5 tabular-nums"><Phone aria-hidden className="size-3.5 shrink-0" />{p}</a>)}
                     </div>
                     <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <i aria-hidden className={cn("size-1.5 rounded-full", seen ? "bg-info" : "bg-primary")} />{seen ? "Seen in Gmail" : "From the sheet"}
+                      <i aria-hidden className={cn("size-1.5 rounded-full", seen ? "bg-info" : "bg-primary")} />{seen ? "Seen in Gmail" : c.source === "scraper" ? "Matched by email domain" : "From the sheet"}
                     </span>
                   </div>
                   <div className="flex shrink-0 gap-1">
@@ -80,7 +81,7 @@ export function ContactsTab({ detail }: { detail: CompanyDetail }) {
       </Section>
       <ConfirmDialog open={removing !== null} onOpenChange={(o) => { if (!o) setRemoving(null); }} destructive pending={remove.isPending} pendingLabel="Removing…"
         title="Remove this contact?" confirmLabel="Remove contact"
-        description={removing ? `${removing.name ?? removing.emails[0]} will no longer be linked to ${detail.company.name}. Gmail conversations from their email will move to Needs company.` : ""}
+        description={removing ? `${removing.name ?? removing.emails[0]} will no longer be linked to ${detail.company.name}. Gmail conversations from their email will move to Needs company.${removing.source === "scraper" ? " Automatic matching will not add it back." : ""}` : ""}
         onConfirm={() => removing && remove.mutate(removing)} />
     </div>
   );

@@ -1,4 +1,4 @@
-import { Inbox, Lock, TriangleAlert } from "lucide-react";
+import { Inbox, Lock, Mail, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pill, STAGE_LABEL, type PillTone } from "@/components/shared/pills";
 import type { Activity } from "@/lib/api-types";
@@ -29,13 +29,29 @@ const EVENT: Record<string, { label: string; tone: PillTone }> = {
 export function ActivityTab({ activity: a }: { activity: Activity }) {
   if (a.candidates.length === 0) {
     return <EmptyState icon={Inbox} title="No Gmail conversations match these contacts."
-      description="Approved Scraper conversations appear here when one of their emails is on this client's contacts." />;
+      description="Scraper conversations appear here, reviewed or not, when one of their emails is on this client's contacts." />;
   }
   const reached = a.stage ? STAGES.indexOf(a.stage) : -1;
   const totals = paymentTotals(a.payments);
   return (
     <div>
-      <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Lock aria-hidden className="size-3.5" />Read-only. Gmail data is reviewed and approved in the Scraper.</p>
+      <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><Lock aria-hidden className="size-3.5" />Read-only. Includes conversations not yet reviewed in the Scraper.</p>
+      <Section title="Summary">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
+          <div><dt className="text-xs text-muted-foreground">Stage</dt><dd className="mt-0.5">{a.summary.stage ? <Pill tone="gold">{STAGE_LABEL[a.summary.stage]}</Pill> : DASH}</dd></div>
+          <div><dt className="text-xs text-muted-foreground">Messages</dt><dd className="mt-0.5 font-semibold tabular-nums">{a.summary.messages.toLocaleString()}</dd></div>
+          <div><dt className="text-xs text-muted-foreground">First contact</dt><dd className="mt-0.5 tabular-nums">{day(a.summary.firstContact)}</dd></div>
+          <div><dt className="text-xs text-muted-foreground">Last contact</dt><dd className="mt-0.5 tabular-nums">{day(a.summary.lastContact)}</dd></div>
+        </dl>
+        {a.summary.latestSubjects.length > 0 && (
+          <div className="mt-3">
+            <h4 className="text-xs text-muted-foreground">Latest subjects</h4>
+            <ul className="mt-1 flex flex-col gap-1 text-[13px]">
+              {a.summary.latestSubjects.map((s) => <li key={s} className="flex min-w-0 items-start gap-2"><Mail aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" /><span className="min-w-0 break-words">{s}</span></li>)}
+            </ul>
+          </div>
+        )}
+      </Section>
       {a.needsCheck.map((msg, i) => (
         <p key={i} className="mb-1.5 flex items-start gap-2.5 rounded-lg bg-[color-mix(in_srgb,var(--warning)_14%,transparent)] px-3 py-2.5 text-[13px]">
           <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />{msg}

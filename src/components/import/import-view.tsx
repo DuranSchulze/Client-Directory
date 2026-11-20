@@ -1,13 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, CircleCheck, FileSpreadsheet, TriangleAlert, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { MasterUploadNote } from "@/components/shared/master-upload-note";
 import { PageHeader } from "@/components/shared/page-header";
 import { errorMessage, request } from "@/lib/api/http";
-import { keys } from "@/lib/api/queries";
+import { keys, masterUploadQuery } from "@/lib/api/queries";
 import type { ImportBuckets, ImportCommitResponse, ImportPreview, ImportPreviewResponse, ImportResult } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
@@ -27,10 +28,12 @@ type Step = { kind: "pick" } | { kind: "checking"; file: File } | { kind: "previ
 
 export function ImportView() {
   const [step, setStep] = useState<Step>({ kind: "pick" });
+  const { data: upload } = useQuery(masterUploadQuery);
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <PageHeader title="Import"
         description="Reads the four tabs of the clients workbook: All Clients Database, Probity Clients, OPS Supplier and All Dept. Emails. You see a preview before anything is saved; re-importing only fills empty fields, so edits made here win." />
+      <MasterUploadNote upload={upload} />
       <section aria-label="Workbook import" className="flex flex-col rounded-2xl bg-card pt-5">
         <ImportBody step={step} setStep={setStep} />
       </section>
@@ -57,7 +60,7 @@ function ImportBody({ step, setStep }: { step: Step; setStep: (s: Step) => void 
     const body = new FormData(); body.set("file", file);
     try {
       const r = await request<ImportCommitResponse>("/api/import/xlsx", { body });
-      await Promise.all([keys.companies, keys.counts, keys.probity, keys.suppliers, keys.deptEmails, keys.needsCompany].map((queryKey) => qc.invalidateQueries({ queryKey })));
+      await Promise.all([keys.companies, keys.counts, keys.probity, keys.suppliers, keys.deptEmails, keys.needsCompany, keys.masterUpload].map((queryKey) => qc.invalidateQueries({ queryKey })));
       toast.success("Import saved");
       setStep({ kind: "done", result: r.result });
     } catch (e) { toast.error(errorMessage(e)); setStep({ kind: "preview", file, preview }); }

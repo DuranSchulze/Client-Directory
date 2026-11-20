@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import type {
   AccountsResponse, AuthResponse, CompaniesResponse, RolesResponse, CompanyDetailResponse, CountsResponse, DeptEmailsResponse,
-  NeedsCompanyResponse, ProbityResponse, SuppliersResponse,
+  MasterUploadResponse, NeedsCompanyResponse, ProbityResponse, SuppliersResponse,
 } from "@/lib/api-types";
 import { request } from "./http";
 
@@ -16,6 +16,7 @@ export const keys = {
   needsCompany: ["needs-company"] as const,
   users: ["users"] as const,
   roles: ["roles"] as const,
+  masterUpload: ["master-upload"] as const,
 };
 
 // Grants can change from another session: re-read on focus and on every navigation (RouteGate), never served stale.
@@ -27,5 +28,6 @@ export const probityQuery = queryOptions({ queryKey: keys.probity, queryFn: () =
 export const suppliersQuery = queryOptions({ queryKey: keys.suppliers, queryFn: () => request<SuppliersResponse>("/api/suppliers").then((r) => r.items) });
 export const deptEmailsQuery = queryOptions({ queryKey: keys.deptEmails, queryFn: () => request<DeptEmailsResponse>("/api/dept-emails").then((r) => r.items) });
 export const needsCompanyQuery = queryOptions({ queryKey: keys.needsCompany, queryFn: () => request<NeedsCompanyResponse>("/api/needs-company").then((r) => r.items) });
+export const masterUploadQuery = queryOptions({ queryKey: keys.masterUpload, queryFn: () => request<MasterUploadResponse>("/api/import/xlsx").then((r) => r.item.lastMasterUpload) });
 export const usersQuery = queryOptions({ queryKey: keys.users, queryFn: () => request<AccountsResponse>("/api/users").then((r) => r.items) });
 export const rolesQuery = queryOptions({ queryKey: keys.roles, queryFn: () => request<RolesResponse>("/api/roles").then((r) => r.items) });
