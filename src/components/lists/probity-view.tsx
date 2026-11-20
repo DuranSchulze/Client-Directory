@@ -7,6 +7,7 @@ import { CircleCheck, CircleX, Pencil, Plus, SearchX, ShieldCheck, UserPlus } fr
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageShell } from "@/components/shared/page-shell";
 import { DataTableCard, TableSearch, type Column } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { RecordDialog, listOf, textOrNull, type RecordField, type RecordValues } from "@/components/shared/record-dialog";
@@ -78,7 +79,7 @@ export function ProbityView() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+    <PageShell>
       <PageHeader title="Probity" description={isPending ? "Probity Clients tab, cross-checked against All Clients." : `${matched} of ${all.length} rows matched to a client by email or name. Matched rows open the client.`}
         actions={<Button onClick={() => setEditing("new")}><Plus />Add probity row</Button>} />
       <DataTableCard title="Probity clients" rows={rows} total={all.length} columns={columns} getRowId={(p) => p.id} itemLabel="rows"
@@ -93,6 +94,6 @@ export function ProbityView() {
         description="Saving re-runs the match against All Clients: email first, then registered name, alias or trade name."
         initial={toValues(editing && editing !== "new" ? editing : undefined)} onSubmit={save}
         validate={(v) => (v.agreementUrl && !/^https?:\/\//.test(v.agreementUrl.trim()) ? { agreementUrl: "Use a full link starting with https://." } : {})} />
-    </div>
+    </PageShell>
   );
 }

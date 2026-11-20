@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MasterUploadNote } from "@/components/shared/master-upload-note";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageShell } from "@/components/shared/page-shell";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { DataTableCard, TableSearch, type Column, type Sort } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -119,7 +120,7 @@ export function ClientsView() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+    <PageShell>
       <PageHeader title="Clients" description={<>The accounting master list. The Scraper reads these clients and contacts to tag Gmail.<span className="mt-2 flex"><MasterUploadNote upload={counts?.lastMasterUpload} /></span></>}
         actions={<>
           <Button variant="secondary" nativeButton={false} render={<a href="/api/companies/export" download />}><Download />Export CSV</Button>
@@ -170,7 +171,7 @@ export function ClientsView() {
       <AddClientDialog open={adding || get("new") === "1"} prefill={{ name: get("name") || undefined, email: get("email") || undefined, contactName: get("contact") || undefined }}
         onOpenChange={(o) => { setAdding(o); if (!o && get("new")) set({ new: null, name: null, email: null, contact: null }); }}
         onCreated={(id) => set({ id, new: null, name: null, email: null, contact: null })} />
-    </div>
+    </PageShell>
   );
 }
 

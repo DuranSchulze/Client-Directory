@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageShell } from "@/components/shared/page-shell";
 import { DataTableCard, type Column } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -46,7 +47,7 @@ export function AccountsView() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+    <PageShell>
       <PageHeader title="Accounts" description="People who can sign in, and the role that decides which pages each one may use."
         actions={<Button onClick={() => setOpen(true)} disabled={!roles}><Plus />New account</Button>} />
       <DataTableCard title="Accounts" rows={users ?? []} columns={columns} getRowId={(u) => u.id} itemLabel="accounts"
@@ -55,7 +56,7 @@ export function AccountsView() {
       <RolesSection roles={roles} />
       {/* Remounted per open so the draft always starts empty. */}
       {open && roles && <NewAccountDialog roles={roles} onClose={() => setOpen(false)} />}
-    </div>
+    </PageShell>
   );
 }
 

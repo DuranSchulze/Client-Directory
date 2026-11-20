@@ -6,6 +6,7 @@ import { Contact, Plus, SearchX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageShell } from "@/components/shared/page-shell";
 import { DataTableCard, TableSearch, type Column } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { RecordDialog, listOf, textOrNull, type RecordField, type RecordValues } from "@/components/shared/record-dialog";
@@ -49,7 +50,7 @@ export function DeptEmailsView() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1200px] flex-col gap-6">
+    <PageShell>
       <PageHeader title="Dept. emails" description="Internal staff and shared mailboxes. These addresses are never clients and never land in Needs company."
         actions={<Button onClick={() => setEditing("new")}><Plus />Add mailbox</Button>} />
       <DataTableCard title="Internal mailboxes" rows={rows} total={all.length} columns={columns} getRowId={(d) => d.id} itemLabel="mailboxes" showRowNumbers={false}
@@ -63,6 +64,6 @@ export function DeptEmailsView() {
         title={editing === "new" ? "Add internal mailbox" : "Edit internal mailbox"} submitLabel={editing === "new" ? "Add mailbox" : "Save mailbox"}
         initial={editing && editing !== "new" ? { department: editing.department, name: editing.name ?? "", title: editing.title ?? "", emails: editing.emails.join(", ") } : { department: departments[0] ?? "", name: "", title: "", emails: "" }}
         onSubmit={save} />
-    </div>
+    </PageShell>
   );
 }

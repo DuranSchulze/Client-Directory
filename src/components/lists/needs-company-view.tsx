@@ -8,6 +8,7 @@ import { Check, ChevronsUpDown, CircleCheck, Link2, Plus, Sparkles } from "lucid
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageShell } from "@/components/shared/page-shell";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState, PlaceholderRows } from "@/components/shared/loadable";
 import { Pill, STAGE_LABEL } from "@/components/shared/pills";
@@ -23,7 +24,7 @@ export function NeedsCompanyView() {
   const { data: companies } = useQuery(companiesQuery);
   const items = data ?? [];
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
+    <PageShell>
       <PageHeader title="Needs company" description="Approved Gmail contacts whose email is on no client and no internal mailbox. Attach each to a client so its activity shows there." />
       <section aria-label="Unlinked Gmail contacts" className="overflow-hidden rounded-2xl border border-edge bg-card">
         <div className="flex items-center gap-3 px-4 pt-4 pb-3">
@@ -35,7 +36,7 @@ export function NeedsCompanyView() {
           : items.length === 0 ? <EmptyState icon={CircleCheck} title="Every approved Gmail contact belongs to a client." />
           : <ul className="flex flex-col gap-2 px-2 pb-2">{items.map((it) => <QueueRow key={it.id} item={it} companies={companies ?? []} />)}</ul>}
       </section>
-    </div>
+    </PageShell>
   );
 }
 

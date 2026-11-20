@@ -6,6 +6,7 @@ import { Plus, SearchX, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageShell } from "@/components/shared/page-shell";
 import { DataTableCard, TableSearch, type Column } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { RecordDialog, listOf, textOrNull, type RecordField, type RecordValues } from "@/components/shared/record-dialog";
@@ -51,7 +52,7 @@ export function SuppliersView() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+    <PageShell>
       <PageHeader title="OPS suppliers" description="Suppliers and contractors from the OPS Supplier tab. A separate list; never matched to clients."
         actions={<Button onClick={() => setEditing("new")}><Plus />Add supplier</Button>} />
       <DataTableCard title="Suppliers" rows={rows} total={all.length} columns={columns} getRowId={(s) => s.id} itemLabel="suppliers"
@@ -63,6 +64,6 @@ export function SuppliersView() {
       <RecordDialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }} fields={FIELDS}
         title={editing === "new" ? "Add supplier" : "Edit supplier"} submitLabel={editing === "new" ? "Add supplier" : "Save supplier"}
         initial={toValues(editing && editing !== "new" ? editing : undefined)} onSubmit={save} />
-    </div>
+    </PageShell>
   );
 }

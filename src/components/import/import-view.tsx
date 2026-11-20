@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MasterUploadNote } from "@/components/shared/master-upload-note";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageShell } from "@/components/shared/page-shell";
 import { ApiError, errorMessage, request } from "@/lib/api/http";
 import { companiesQuery, keys, masterUploadQuery, meQuery } from "@/lib/api/queries";
 import type { ImportBuckets, ImportCommitResponse, ImportPreview, ImportPreviewResponse, ImportResult } from "@/lib/api-types";
@@ -30,14 +31,14 @@ export function ImportView() {
   const [step, setStep] = useState<Step>({ kind: "pick" });
   const { data: upload } = useQuery(masterUploadQuery);
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <PageShell narrow>
       <PageHeader title="Import"
         description="Reads the four tabs of the clients workbook: All Clients Database, Probity Clients, OPS Supplier and All Dept. Emails. You see a preview before anything is saved; re-importing only fills empty fields, so edits made here win." />
       <MasterUploadNote upload={upload} />
       <section aria-label="Workbook import" className="flex flex-col rounded-2xl bg-card pt-5">
         <ImportBody step={step} setStep={setStep} />
       </section>
-    </div>
+    </PageShell>
   );
 }
 
