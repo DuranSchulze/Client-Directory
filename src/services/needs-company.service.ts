@@ -11,9 +11,12 @@ import { assertEmailsAvailable } from "./contacts.service";
 import { refreshProbityMatches } from "./probity.service";
 import { emails, id, object } from "./validation.service";
 
+export function domainCompanies(domains: Set<string>, contacts: { companyId: number; emails: string[] }[]) {
+  return new Set(contacts.filter((contact) => contact.emails.some((email) => domains.has(email.toLowerCase().split("@")[1]))).map((contact) => contact.companyId));
+}
 export function suggestCompany(candidate: CandidateItem, companies: { id: number; name: string }[], contacts: { companyId: number; emails: string[] }[]): NeedsCompanyItem["suggestion"] {
   const domains = new Set((candidate.fields.emails?.value ?? []).map((email) => email.toLowerCase().split("@")[1]).filter((domain) => domain && !isFreeMail(domain)));
-  const companyIds = new Set(contacts.filter((contact) => contact.emails.some((email) => domains.has(email.toLowerCase().split("@")[1]))).map((contact) => contact.companyId));
+  const companyIds = domainCompanies(domains, contacts);
   const company = companies.find((company) => companyIds.has(company.id));
   return company ? { companyId: company.id, name: company.name } : null;
 }

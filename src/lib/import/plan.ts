@@ -12,6 +12,7 @@ import type { ImportPreview } from "./contract";
 export type ImportSnapshot = { companies: CompanyRow[]; contacts: ContactRow[]; deptEmails: DeptEmailRow[]; suppliers: SupplierRow[]; probity: ProbityRow[] };
 export type Write<T> = { id: number; values: T };
 export type ImportPlan = {
+  contactUpdates: { id: number; emails: string[] }[];
   companies: Write<CompanyInsert>[]; contacts: (ContactInput & { companyId: number })[];
   deptEmails: Write<DeptEmailInput>[]; suppliers: Write<SupplierInput>[]; probity: Write<ProbityInput>[]; preview: ImportPreview;
 };
@@ -40,6 +41,20 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
   const probityWrites = new Map<number, ProbityInput>();
   const contacts: ImportPlan["contacts"] = [];
   const owners = new Map<string, number>(snapshot.contacts.flatMap((row) => row.emails.map((email) => [lower(email), row.companyId] as const)));
+  const contactUpdates = new Map<number, string[]>();
+  const moves: ImportPreview["moves"] = [];
+  const reclaimed = new Set<string>();
+  const reclaim = (email: string, target: number | null) => {
+    const holders = snapshot.contacts.filter((row) => row.emails.some((e) => lower(e) === email));
+    if (reclaimed.has(email) || !holders.length || holders.some((row) => row.source !== "scraper" || row.companyId === target)) return false;
+    reclaimed.add(email);
+    for (const row of holders) {
+      contactUpdates.set(row.id, (contactUpdates.get(row.id) ?? row.emails).filter((e) => lower(e) !== email));
+      if (!moves.some((move) => move.email === email && move.fromCompanyId === row.companyId)) moves.push({ email, fromCompanyId: row.companyId, toCompanyId: target });
+    }
+    owners.delete(email);
+    return true;
+  };
   const internal = new Set([...snapshot.deptEmails.flatMap((row) => row.emails), ...parsed.deptEmails.flatMap(({ value }) => value.emails ?? [])].map(lower));
   const deptOwned = new Map(snapshot.deptEmails.flatMap((row) => row.emails.map((email) => [lower(email), row.id] as const)));
   const hasMain = new Set(snapshot.contacts.filter((row) => row.billingRole === "main").map((row) => row.companyId));
@@ -51,10 +66,10 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
     const old = named ? dept.get(deptKey(incoming)) : undefined;
     if (!named && incoming.emails?.some((email) => deptOwned.has(lower(email)))) continue;
     incoming.emails = (incoming.emails ?? []).filter((email) => {
-      if (owners.has(lower(email))) { flag("internalEmails", source, "Department email already belongs to a client; address skipped", "emails"); return false; }
       const owner = deptOwned.get(lower(email));
-      if (owner === undefined || owner === old?.id) return true;
-      flag("internalEmails", source, "Department email already belongs to another mailbox; address skipped", "emails"); return false;
+      if (owner !== undefined && owner !== old?.id) { flag("internalEmails", source, "Department email already belongs to another mailbox; address skipped", "emails"); return false; }
+      if (owners.has(lower(email)) && !reclaim(lower(email), null)) { flag("internalEmails", source, "Department email already belongs to a client; address skipped", "emails"); return false; }
+      return true;
     });
     if (source.value.emails?.length && !incoming.emails.length) continue;
     if (!old) {
@@ -115,7 +130,7 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
         email = lower(email);
         if (internal.has(email)) { flag("internalEmails", source, "Internal email excluded from client contacts", "emails"); return false; }
         const owner = owners.get(email);
-        if (owner !== undefined) {
+        if (owner !== undefined && (owner === current!.id || !reclaim(email, current!.id))) {
           if (owner !== current!.id) flag("sharedEmails", source, "Email already belongs to another client; later occurrence skipped", "emails");
           return false;
         }
@@ -141,15 +156,15 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
   }
   const matches = { matched: 0, notFound: 0 };
   const matchCompanies = [...companies.values()].map((row) => ({ id: row.id, name: row.name, alias: row.alias ?? null, tradeName: row.tradeName ?? null }));
-  const matchContacts = [...snapshot.contacts, ...contacts];
+  const matchContacts = [...snapshot.contacts.map((row) => ({ ...row, emails: contactUpdates.get(row.id) ?? row.emails })), ...contacts];
   for (const key of importedProbity) {
     const row = probity.get(key)!;
     const match = matchProbity({ ...row, emails: row.emails ?? [], companyId: row.companyId ?? null, matchedBy: row.matchedBy ?? null }, matchCompanies, matchContacts);
     if (match.companyId === null) matches.notFound++; else matches.matched++;
   }
   const writes = <T>(map: Map<number, T>): Write<T>[] => [...map].map(([id, values]) => ({ id, values }));
-  const plan = { companies: writes(companyWrites), contacts, deptEmails: writes(deptWrites), suppliers: writes(supplierWrites), probity: writes(probityWrites) };
+  const plan = { contactUpdates: [...contactUpdates].map(([id, emails]) => ({ id, emails })), companies: writes(companyWrites), contacts, deptEmails: writes(deptWrites), suppliers: writes(supplierWrites), probity: writes(probityWrites) };
   const count = (rows: { id: number }[]) => ({ inserted: rows.filter((row) => row.id < 0).length, updated: rows.filter((row) => row.id > 0).length });
   return { ...plan, preview: { rows: { companies: parsed.companies.length, contacts: parsed.companies.reduce((n, row) => n + row.contacts.length, 0), suppliers: parsed.suppliers.length, deptEmails: parsed.deptEmails.length, probity: parsed.probity.length }, companies: spellings.size,
-    changes: { companies: count(plan.companies), contacts: { inserted: contacts.length, updated: 0 }, suppliers: count(plan.suppliers), deptEmails: count(plan.deptEmails), probity: count(plan.probity) }, buckets, probity: matches } };
+    changes: { companies: count(plan.companies), contacts: { inserted: contacts.length, updated: contactUpdates.size }, suppliers: count(plan.suppliers), deptEmails: count(plan.deptEmails), probity: count(plan.probity) }, moves, buckets, probity: matches } };
 }

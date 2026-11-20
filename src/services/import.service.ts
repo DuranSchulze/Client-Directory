@@ -9,6 +9,8 @@ import * as repo from "@/repositories/import.repository";
 import { lockEmailOwnership } from "@/repositories/ownership.repository";
 import { updateDeptEmail } from "@/repositories/dept-emails.repository";
 import { refreshProbityMatches } from "./probity.service";
+import { distributeMatches } from "./distribute.service";
+import { deleteContact, updateContact } from "@/repositories/contacts.repository";
 import { accountNumber } from "./companies.service";
 
 function* chunks<T>(items: T[]): Generator<T[]> {
@@ -29,10 +31,14 @@ export async function importWorkbook(data: Buffer, check: boolean, userEmail: st
     }
   }
   if (check) return { preview: planImport(parsed, await repo.readImportSnapshot()).preview };
-  return withTransaction(async (tx) => {
+  const committed = await withTransaction(async (tx) => {
     await lockEmailOwnership(tx);
     // Replan under the shared ownership lock; a preview is never trusted as a write plan.
     const plan = planImport(parsed, await repo.readImportSnapshot(tx));
+    for (const row of plan.contactUpdates) {
+      if (row.emails.length) await updateContact(row.id, { emails: row.emails }, tx);
+      else await deleteContact(row.id, tx);
+    }
     for (const batch of chunks(plan.deptEmails.filter((row) => row.id < 0))) await repo.insertImportDeptEmails(batch.map((row) => row.values), tx);
     for (const batch of chunks(plan.deptEmails.filter((row) => row.id > 0))) for (const row of batch) await updateDeptEmail(row.id, row.values, tx);
     for (const batch of chunks(plan.suppliers.filter((row) => row.id < 0))) await repo.insertImportSuppliers(batch.map((row) => row.values), tx);
@@ -52,4 +58,9 @@ export async function importWorkbook(data: Buffer, check: boolean, userEmail: st
     await repo.insertMasterUpload({ fileName, uploadedBy: userEmail, summary: result.changes }, tx);
     return { result };
   });
+  if (process.env.AUTO_DISTRIBUTE === "1") {
+    try { await distributeMatches(); }
+    catch { console.error("Automatic contact distribution failed after import"); }
+  }
+  return committed;
 }

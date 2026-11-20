@@ -25,3 +25,13 @@ it("queries only approved candidates, coalesces reviewed fields, caps reads and 
   await findApprovedCandidate(7, ex as unknown as Executor);
   expect(dialect.sqlToQuery(chain.where.mock.calls[2][0]).params).toEqual([7, "approved"]);
 });
+
+it("lists only pending and approved distributable candidates, preferring reviewed fields without a page cap", async () => {
+  const { drizzle } = await import("drizzle-orm/neon-serverless");
+  const query = vi.fn().mockResolvedValue({ rows: [] });
+  const { listDistributable } = await import("@/repositories/candidates.repository");
+  await listDistributable(drizzle({ query } as never) as unknown as Executor);
+  expect(query.mock.calls[0][1]).toEqual(["pending", "approved"]);
+  expect(query.mock.calls[0][0].text).toContain('coalesce("reviewed", "fields")');
+  expect(query.mock.calls[0][0].text).not.toContain("limit");
+});

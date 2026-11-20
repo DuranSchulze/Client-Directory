@@ -14,7 +14,7 @@ export function companyDto(row: CompanyRow): CompanyItem {
 }
 export function contactDto(row: ContactRow): ContactItem {
   return { id: row.id, companyId: row.companyId, name: row.name, designation: row.designation, emails: row.emails,
-    phones: row.phones, billingRole: row.billingRole, updatedAt: row.updatedAt.toISOString() };
+    phones: row.phones, billingRole: row.billingRole, source: row.source, updatedAt: row.updatedAt.toISOString() };
 }
 export function probityDto(row: ProbityRow, companyName: string | null): ProbityItem {
   return { id: row.id, companyListed: row.companyListed, companyId: row.companyId, companyName, matchedBy: row.matchedBy,

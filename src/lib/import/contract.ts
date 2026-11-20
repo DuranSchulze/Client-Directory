@@ -5,6 +5,7 @@ export type ImportPreview = {
   rows: { companies: number; contacts: number; suppliers: number; deptEmails: number; probity: number };
   companies: number;
   changes: Record<"companies" | "contacts" | "suppliers" | "deptEmails" | "probity", { inserted: number; updated: number }>;
+  moves: { email: string; fromCompanyId: number; toCompanyId: number | null }[];
   buckets: ImportBuckets;
   probity: { matched: number; notFound: number };
 };

@@ -1,10 +1,11 @@
 import { withTransaction, type Tx } from "@/db";
+import { normEmail } from "@/lib/normalize";
 import { AppError } from "@/lib/errors";
 import { contactDto } from "@/lib/dto";
 import type { ContactInput } from "@/lib/api-types";
 import { findCompany } from "@/repositories/companies.repository";
 import * as repo from "@/repositories/contacts.repository";
-import { findDeptEmail, findEmailOwner, lockEmailOwnership } from "@/repositories/ownership.repository";
+import { findDeptEmail, findEmailOwner, lockEmailOwnership, suppressEmails } from "@/repositories/ownership.repository";
 import { refreshProbityMatches } from "./probity.service";
 import { validateContact } from "./validation.service";
 
@@ -52,6 +53,11 @@ export async function removeContact(companyId: number, contactId: number): Promi
     if (!contact) throw new AppError(404, "Contact not found");
     if ((await repo.listContacts(companyId, tx)).length === 1) throw new AppError(409, "Cannot delete the last contact of a client");
     if (contact.billingRole === "main") throw new AppError(409, "Make another contact main first");
+    if (contact.source === "scraper") {
+      const { requireRouteAccess } = await import("@/lib/auth/guard");
+      const user = await requireRouteAccess("directory");
+      await suppressEmails(contact.emails.map(normEmail), companyId, user.email, tx);
+    }
     await repo.deleteContact(contactId, tx);
     await refreshProbityMatches(tx);
   });

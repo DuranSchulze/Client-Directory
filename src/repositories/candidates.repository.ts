@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, type Executor } from "@/db";
 import { ext_candidates as candidates } from "@/db/external/candidates";
 import { contacts_tb as contacts } from "@/db/schema/contacts";
@@ -21,4 +21,9 @@ export async function listUnlinkedCandidates(ex: Executor = db) {
 }
 export async function findApprovedCandidate(id: number, ex: Executor = db) {
   return (await ex.select({ id: candidates.id, fields }).from(candidates).where(and(eq(candidates.id, id), eq(candidates.reviewState, "approved"))).limit(1))[0] ?? null;
+}
+
+export async function listDistributable(ex: Executor = db) {
+  return ex.select({ id: candidates.id, fields }).from(candidates)
+    .where(inArray(candidates.reviewState, ["pending", "approved"])).orderBy(candidates.id);
 }

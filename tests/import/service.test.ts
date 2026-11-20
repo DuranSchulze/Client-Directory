@@ -3,14 +3,17 @@ import * as XLSX from "xlsx";
 import { decryptAccountNo } from "@/lib/crypto/account-no";
 
 const m = vi.hoisted(() => ({
-  log: vi.fn(), transaction: vi.fn(), lock: vi.fn(), snapshot: vi.fn(), companies: vi.fn(), contacts: vi.fn(), dept: vi.fn(), suppliers: vi.fn(), probity: vi.fn(), updateCompany: vi.fn(), updateProbity: vi.fn(), updateSupplier: vi.fn(), refresh: vi.fn(), trace: [] as string[],
+  updateContact: vi.fn(), deleteContact: vi.fn(), distribute: vi.fn(), log: vi.fn(), transaction: vi.fn(), lock: vi.fn(), snapshot: vi.fn(), companies: vi.fn(), contacts: vi.fn(), dept: vi.fn(), suppliers: vi.fn(), probity: vi.fn(), updateCompany: vi.fn(), updateProbity: vi.fn(), updateSupplier: vi.fn(), refresh: vi.fn(), trace: [] as string[],
 }));
+vi.mock("@/repositories/contacts.repository", () => ({ updateContact: m.updateContact, deleteContact: m.deleteContact }));
+vi.mock("@/services/distribute.service", () => ({ distributeMatches: m.distribute }));
 vi.mock("@/db", () => ({ db: {}, withTransaction: m.transaction }));
 vi.mock("@/repositories/import.repository", () => ({ insertMasterUpload: m.log, readImportSnapshot: m.snapshot, insertImportCompanies: m.companies, insertImportContacts: m.contacts, insertImportDeptEmails: m.dept, insertImportSuppliers: m.suppliers, insertImportProbity: m.probity, updateImportCompany: m.updateCompany, updateImportProbity: m.updateProbity, updateImportSupplier: m.updateSupplier }));
 vi.mock("@/repositories/ownership.repository", () => ({ lockEmailOwnership: m.lock }));
 vi.mock("@/services/probity.service", () => ({ refreshProbityMatches: m.refresh }));
 beforeEach(() => {
   vi.resetAllMocks(); m.trace.length = 0;
+  vi.stubEnv("AUTO_DISTRIBUTE", "");
   vi.stubEnv("ACCOUNT_NO_KEY", Buffer.alloc(32, 9).toString("base64"));
   m.transaction.mockImplementation(async (fn) => fn({ transaction: true }));
   m.lock.mockImplementation(async () => { m.trace.push("lock"); });
@@ -119,4 +122,40 @@ it("logs exactly one changes summary using the commit transaction, including emp
   expect(m.log).toHaveBeenCalledTimes(1);
   expect(m.log).toHaveBeenCalledWith({ fileName: "empty.xlsx", uploadedBy: "admin@example.test", summary: response.result.changes }, { transaction: true });
   expect(Object.values(response.result.changes).every((c) => c.inserted === 0 && c.updated === 0)).toBe(true);
+});
+
+it("runs distribution only after commit and retains the response when distribution throws", async () => {
+  vi.stubEnv("AUTO_DISTRIBUTE", "1");
+  m.transaction.mockImplementation(async (fn) => { const result = await fn({ transaction: true }); m.trace.push("committed"); return result; });
+  m.distribute.mockImplementation(async () => { m.trace.push("distribution"); throw new Error("Failed distribution"); });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const { importWorkbook } = await import("@/services/import.service");
+    const response = await importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx");
+    expect(response).toHaveProperty("result");
+    expect(m.trace.slice(-2)).toEqual(["committed", "distribution"]);
+    expect(log).toHaveBeenCalledWith("Automatic contact distribution failed after import");
+    expect(m.log).toHaveBeenCalledTimes(1);
+  } finally { log.mockRestore(); }
+});
+it("does not trigger distribution for preview, rollback or default-off commits", async () => {
+  const { importWorkbook } = await import("@/services/import.service");
+  await importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx");
+  vi.stubEnv("AUTO_DISTRIBUTE", "1");
+  await importWorkbook(workbook(), true, "admin@example.test", "synthetic.xlsx");
+  m.probity.mockRejectedValueOnce(new Error("Rollback"));
+  await expect(importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx")).rejects.toThrow("Rollback");
+  expect(m.distribute).not.toHaveBeenCalled();
+});
+
+it.each([{ remaining: ["keep@other.test"] }, { remaining: [] }])("applies Excel moves before contact inserts; preserves remaining emails %j", async ({ remaining }) => {
+  m.snapshot.mockResolvedValue({ companies: [], contacts: [{ id: 8, companyId: 99, emails: ["client@example.test", ...remaining], source: "scraper", billingRole: "cc" }], deptEmails: [], suppliers: [], probity: [] });
+  const { importWorkbook } = await import("@/services/import.service");
+  await importWorkbook(workbook(), true, "admin@example.test", "synthetic.xlsx");
+  expect(m.updateContact).not.toHaveBeenCalled(); expect(m.deleteContact).not.toHaveBeenCalled();
+  await importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx");
+  const changed = remaining.length ? m.updateContact : m.deleteContact;
+  if (remaining.length) expect(m.updateContact).toHaveBeenCalledWith(8, { emails: remaining }, { transaction: true });
+  else expect(m.deleteContact).toHaveBeenCalledWith(8, { transaction: true });
+  expect(changed.mock.invocationCallOrder[0]).toBeLessThan(m.contacts.mock.invocationCallOrder[0]);
 });

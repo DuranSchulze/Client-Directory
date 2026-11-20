@@ -113,3 +113,41 @@ it("does not repeatedly update an empty TIN when a conflicting TIN is skipped", 
   old.companies = [company(), { ...company(), id: 2, name: "Other", nameKey: "other", tin: "123-456-789-000" }];
   expect(planImport(parsed, old).companies).toHaveLength(0);
 });
+
+it("moves only scraper-owned emails, retains other addresses, and reports moves in preview", () => {
+  const old = snapshot(); old.companies = [company(), { ...company(), id: 2, name: "Other", nameKey: "other" }];
+  old.contacts = [{ id: 1, companyId: 2, name: "Auto", designation: null, emails: ["move@acme.test", "stay@other.test"], phones: [], billingRole: "cc", source: "scraper", updatedAt: new Date() }];
+  const parsed = parse({ "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS"], ["Acme", "move@acme.test"], ["Third", "move@acme.test"]] });
+  const plan = planImport(parsed, old);
+  expect(plan.contactUpdates).toEqual([{ id: 1, emails: ["stay@other.test"] }]);
+  expect(plan.contacts).toHaveLength(1);
+  expect(plan.contacts[0]).toMatchObject({ companyId: 1, emails: ["move@acme.test"] });
+  expect(plan.preview.moves).toEqual([{ email: "move@acme.test", fromCompanyId: 2, toCompanyId: 1 }]);
+  expect(plan.preview.changes.contacts).toEqual({ inserted: 1, updated: 1 });
+  expect(plan.preview.buckets.sharedEmails).toHaveLength(1);
+  expect(old.contacts[0].emails).toEqual(["move@acme.test", "stay@other.test"]);
+});
+it("empties a moved contact for deletion and plans probity against its new owner", () => {
+  const old = snapshot(); old.companies = [company(), { ...company(), id: 2, name: "Other", nameKey: "other" }];
+  old.contacts = [{ id: 1, companyId: 2, name: null, designation: null, emails: ["move@acme.test"], phones: [], billingRole: "cc", source: "scraper", updatedAt: new Date() }];
+  const parsed = parse({ "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS"], ["Acme", "move@acme.test"]], "Probity Clients": [["COMPANY", "Email Address"], ["Unknown", "move@acme.test"]] });
+  const spy = vi.spyOn(matcher, "matchProbity");
+  const plan = planImport(parsed, old);
+  expect(plan.contactUpdates).toEqual([{ id: 1, emails: [] }]);
+  expect(spy.mock.results.at(-1)!.value.companyId).toBe(1);
+});
+it.each([null, "import"])("preserves conflicts if any holder is manual/import-owned (%s)", (source) => {
+  const old = snapshot(); old.companies = [company()];
+  old.contacts = ["scraper", source].map((source, i) => ({ id: i + 1, companyId: 2, name: null, designation: null, emails: ["move@acme.test"], phones: [], billingRole: "cc", source, updatedAt: new Date() }));
+  const plan = planImport(parse({ "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS"], ["Acme", "move@acme.test"]] }), old);
+  expect(plan.contacts).toEqual([]); expect(plan.contactUpdates).toEqual([]); expect(plan.preview.moves).toEqual([]);
+  expect(plan.preview.buckets.sharedEmails).toHaveLength(1);
+});
+it("can assign a scraper-owned email to a workbook department mailbox", () => {
+  const old = snapshot();
+  old.contacts = [{ id: 1, companyId: 2, name: null, designation: null, emails: ["dept@acme.test"], phones: [], billingRole: "cc", source: "scraper", updatedAt: new Date() }];
+  const plan = planImport(parse({ "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS"]], "All Dept. Emails": [["Department", "Name", "Email Address"], ["Legal", "Staff", "dept@acme.test"]] }), old);
+  expect(plan.contactUpdates).toEqual([{ id: 1, emails: [] }]);
+  expect(plan.deptEmails[0].values.emails).toEqual(["dept@acme.test"]);
+  expect(plan.preview.moves[0].toCompanyId).toBeNull();
+});

@@ -25,7 +25,7 @@ npm run dev             # http://127.0.0.1:3100
 
 `npm run db:push` is a **dry run**: it exports the declared schema, validates the entire SQL batch, reads the live catalog and prints missing directory objects without writing. `npm run db:apply` applies that plan on one connection in one transaction; an error rolls it back. Both commands read `DATABASE_URL` from `.env`.
 
-The tool only bootstraps missing tables, indexes and constraints for the 8 directory tables in `public`. It rejects unsupported SQL and references to other tables or schemas before any write. The table allowlist is shared with `drizzle.config.ts`. Existing objects are matched by kind and owning table; existing tables must have the declared column names, types and nullability. Column drift fails with a request for a reviewed manual migration: this tool does not migrate existing objects or reconcile index/constraint definitions.
+The tool only bootstraps missing tables, indexes and constraints for the 10 directory tables in `public`. It rejects unsupported SQL and references to other tables or schemas before any write. The table allowlist is shared with `drizzle.config.ts`. Existing objects are matched by kind and owning table; existing tables must have the declared column names, types and nullability. Column drift fails with a request for a reviewed manual migration: the sole additive migration is nullable `contacts.source`; otherwise this tool does not migrate existing objects or reconcile index/constraint definitions.
 
 1. Point `DATABASE_URL` at a disposable Neon branch, inspect `npm run db:push`, then run `npm run db:apply` there.
 2. Restore the intended `DATABASE_URL`, set `TEST_DATABASE_URL` to the disposable branch (different from `DATABASE_URL`), and run `npm run test:int`.
@@ -77,3 +77,11 @@ docker compose up -d   # http://127.0.0.1:3100, reads .env at runtime
 ```
 
 The image is a Next standalone build (`BUILD_STANDALONE=1`) on `node:22-alpine`. Secrets are read at runtime only, never baked into the image. Behind Docker, put a reverse proxy in front that sets `X-Forwarded-For`, since the login rate limit keys on it.
+
+## Automatic contact distribution
+
+Automatic writes are off by default. After verifying the schema and integration tests on the dev DB, enable `AUTO_DISTRIBUTE=1`. Pending and approved Scraper candidates can become `cc` contacts when their valid corporate domains identify exactly one client using manual/import contacts. Free-mail domains and `INTERNAL_DOMAINS` (a comma-separated list) are excluded. Auto-added contacts never seed new matches. Scraper tables remain read-only.
+
+Docker runs distribution after each committed workbook upload and every `DISTRIBUTE_EVERY_MINUTES` (default 15, minimum 5). Vercel staging runs only the after-upload trigger. No timer runs in builds or tests. Both triggers use a nonblocking advisory lock; overlapping runs skip, while writes serialize with import and manual attachment under the email ownership lock. A failed after-upload run is logged without failing the committed import.
+
+A later workbook may move an email from an auto-added contact to its workbook client or department mailbox. Preview `moves` lists `{ email, fromCompanyId, toCompanyId }` (null for a department; temporary negative client IDs identify new clients in preview); `changes.contacts.updated` counts affected source contacts, including those deleted when emptied. Manual/import-owned conflicts retain their existing behavior. Deleting an auto-added contact suppresses its emails from future automatic runs; manual Needs company attachment remains available. Contacts expose `source: "scraper"` for auto-added rows, otherwise null; CSV columns stay the same.
