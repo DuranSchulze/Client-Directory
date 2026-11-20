@@ -47,11 +47,44 @@ function toggleCollapsed() {
   window.dispatchEvent(new Event(COLLAPSE_EVENT));
 }
 
-const ROW = "group/row relative flex h-9 w-full items-center rounded-lg text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+// Every row keeps its icon in a fixed 3rem slot, so icons never move while the width animates and labels are only clipped.
+const ROW = "group/row relative flex h-9 w-full items-center rounded-md text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring";
 const SLOT = "flex w-12 shrink-0 items-center justify-center";
 const ICON = "size-[1.125rem] shrink-0";
 const IDLE = "text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground";
-const ITEM = "flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-highlighted:bg-accent [&_svg]:size-4 [&_svg]:shrink-0";
+const ITEM = "flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0";
+
+// Pages are grouped like the Scraper's sidebar; Import and Accounts sit under Admin.
+const GROUPS = [{ label: "Directory", admin: false }, { label: "Admin", admin: true }] as const;
+
+function NavRow({ href, label, icon: Icon, active, badge, tip, onNavigate }: {
+  href: string; label: string; icon: React.ElementType; active: boolean; badge: Badge; tip: boolean; onNavigate?: () => void;
+}) {
+  return (
+    <Tooltip disabled={!tip}>
+      <TooltipTrigger render={
+        <Link href={href} onClick={onNavigate} aria-label={label} aria-current={active ? "page" : undefined}
+          className={cn(ROW, active ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : IDLE)} />
+      }>
+        {active && <span aria-hidden className="absolute top-1/2 left-0 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-sidebar-primary" />}
+        <span className={cn(SLOT, "relative")}>
+          <Icon className={ICON} />
+          {badge?.hot && <span aria-hidden className={cn("absolute top-0.5 right-2 size-2.5 rounded-full bg-primary ring-2 not-in-data-[sidebar=collapsed]:hidden max-lg:hidden", active ? "ring-sidebar-accent" : "ring-sidebar")} />}
+        </span>
+        <span className="sb-label flex min-w-0 flex-1 items-center gap-2 pr-2 whitespace-nowrap">
+          <span className="truncate">{label}</span>
+          {badge && (
+            <span className={cn("ml-auto rounded-full px-1.5 py-px text-xs tabular-nums",
+              badge.hot ? "bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] font-semibold text-primary-text" : "font-semibold text-muted-foreground")}>
+              <span className="sr-only">{badge.hot ? "needs attention: " : "count: "}</span>{badge.value > 9999 ? "9999+" : badge.value.toLocaleString()}
+            </span>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={10}>{label}{badge ? ` · ${badge.value}` : ""}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 function SidebarContent({ tip, collapsed, showCollapse, onNavigate, onLogout }: {
   tip: boolean; collapsed: boolean; showCollapse: boolean; onNavigate?: () => void; onLogout: () => void;
@@ -61,88 +94,97 @@ function SidebarContent({ tip, collapsed, showCollapse, onNavigate, onLogout }: 
   const { data: me } = useQuery(meQuery);
   const { data: counts } = useQuery({ ...countsQuery, enabled: !!me?.routes.includes("directory") });
   const nav = NAV.filter((n) => me?.routes.includes(n.route));
+  const groups = GROUPS.map((g) => ({ ...g, items: nav.filter((n) => (n.route === "directory") !== g.admin) })).filter((g) => g.items.length);
   const name = me?.name ?? "Account";
   return (
     <div className="flex h-full flex-col text-sidebar-foreground">
-      <div className="flex h-16 shrink-0 items-center px-2">
+      <div className="flex h-14 shrink-0 items-center px-2">
         <span className={SLOT}>
-          <span className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"><Building2 className="size-4" /></span>
+          <span className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"><Building2 className="size-4 shrink-0" /></span>
         </span>
-        <span className="sb-label min-w-0 flex-1 truncate pr-2 text-[15px] font-bold tracking-tight whitespace-nowrap">Client Directory</span>
+        <span className="sb-label min-w-0 flex-1 truncate pr-2 text-sm font-semibold tracking-tight whitespace-nowrap">Client Directory</span>
       </div>
-      <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2 py-2">
-        {nav.map(({ href, label, icon: Icon, badge }, i) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
-          const b = badge(counts);
-          return (
-            <Tooltip key={href} disabled={!tip}>
-              {/* Import and Accounts sit apart from the directory pages. */}
-              {i > 0 && badge === none && nav[i - 1].badge !== none && <span aria-hidden className="mt-3" />}
-              <TooltipTrigger render={
-                <Link href={href} onClick={onNavigate} aria-current={active ? "page" : undefined}
-                  className={cn(ROW, active ? "bg-sidebar-accent text-sidebar-accent-foreground" : IDLE)} />
-              }>
-                {active && <span aria-hidden className="absolute top-1/2 left-0 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-sidebar-primary" />}
-                <span className={cn(SLOT, "relative")}>
-                  <Icon className={cn(ICON, active && "text-primary-text")} />
-                  {b?.hot && <span aria-hidden className="absolute top-0.5 right-2.5 size-2 rounded-full bg-primary not-in-data-[sidebar=collapsed]:hidden max-lg:hidden" />}
-                </span>
-                <span className="sb-label flex min-w-0 flex-1 items-center gap-2 pr-2 whitespace-nowrap">
-                  <span className="truncate">{label}</span>
-                  {b && (
-                    <span className={cn("ml-auto rounded-full px-1.5 text-xs tabular-nums",
-                      b.hot ? "bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] font-bold text-primary-text" : "font-semibold text-muted-foreground")}>
-                      <span className="sr-only">{b.hot ? "needs attention: " : "count: "}</span>{b.value > 9999 ? "9999+" : b.value.toLocaleString()}
-                    </span>
-                  )}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={10}>{label}{b ? ` · ${b.value}` : ""}</TooltipContent>
-            </Tooltip>
-          );
-        })}
+      <nav aria-label="Main" className="flex flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto px-2 py-2">
+        {groups.map((g) => (
+          <div key={g.label} role="group" aria-label={g.label} className="flex flex-col gap-0.5">
+            <div className="relative h-7">
+              <span aria-hidden className="sb-label absolute inset-y-0 left-3 flex items-center text-xs font-medium whitespace-nowrap text-sidebar-foreground/70">{g.label}</span>
+              <span aria-hidden className="sb-icon-collapsed absolute top-1/2 left-4 h-px w-4 bg-sidebar-border" />
+            </div>
+            {g.items.map(({ href, label, icon, badge }) => (
+              <NavRow key={href} href={href} label={label} icon={icon} badge={badge(counts)} tip={tip}
+                active={pathname === href || pathname.startsWith(href + "/")} onNavigate={onNavigate} />
+            ))}
+          </div>
+        ))}
       </nav>
+      {/* A labelled row (not a header icon), so the collapse control is easy to find. It sits above the footer's border line. */}
       {showCollapse && (
         <div className="px-2 pb-2">
-          <button type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed} className={cn(ROW, IDLE)}>
-            <span className={SLOT}>
-              <PanelLeftClose className={cn("sb-icon-expanded", ICON)} />
-              <PanelLeftOpen className={cn("sb-icon-collapsed", ICON)} />
-            </span>
-            <span className="sb-label pr-2 whitespace-nowrap">Collapse sidebar</span>
-          </button>
+          <Tooltip disabled={!tip}>
+            <TooltipTrigger render={
+              <button type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed}
+                className={cn(ROW, IDLE)} />
+            }>
+              <span className={SLOT}>
+                <PanelLeftClose className={cn("sb-icon-expanded", ICON)} />
+                <PanelLeftOpen className={cn("sb-icon-collapsed", ICON)} />
+              </span>
+              <span className="sb-label pr-2 whitespace-nowrap">Collapse sidebar</span>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={10}>Expand sidebar</TooltipContent>
+          </Tooltip>
         </div>
       )}
-      <div className="p-2">
-        <div className="flex items-center rounded-lg bg-sidebar-accent/60">
+      <div className="border-t border-sidebar-border p-2">
+        {/* One account card: the menu trigger fills it and the theme button sits inside it (hidden while collapsed; the menu has the same action). */}
+        <div className="flex items-center rounded-md">
           <MenuPrimitive.Root>
-            <MenuPrimitive.Trigger aria-label={`Account menu for ${name}`}
-              className={cn(ROW, "h-12 min-w-0 flex-1 text-left font-medium text-sidebar-foreground hover:bg-sidebar-accent data-popup-open:bg-sidebar-accent")}>
-              <span className={SLOT}>
-                <span aria-hidden className="flex size-8 items-center justify-center rounded-full bg-accent text-xs font-bold uppercase">{name.slice(0, 2)}</span>
-              </span>
-              <span className="sb-label min-w-0 flex-1 pr-2 leading-tight whitespace-nowrap">
-                <span className="block truncate text-sm font-semibold">{name}</span>
-                <span className="block truncate text-xs text-sidebar-foreground/70">{me ? `${me.role.name} · ${me.email}` : "Signed in"}</span>
-              </span>
-            </MenuPrimitive.Trigger>
+            {/* Tooltip and menu share one button: the tooltip trigger renders the menu trigger. */}
+            <Tooltip disabled={!tip}>
+              <TooltipTrigger render={
+                <MenuPrimitive.Trigger aria-label={`Account menu for ${name}`}
+                  className={cn(ROW, "h-12 min-w-0 flex-1 text-left text-sidebar-foreground hover:bg-sidebar-accent/70 data-popup-open:bg-sidebar-accent")} />
+              }>
+                <span className={SLOT}>
+                  <span aria-hidden className="flex size-8 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground uppercase ring-1 ring-sidebar-border">{name.slice(0, 1)}</span>
+                </span>
+                <span className="sb-label flex min-w-0 flex-1 items-center gap-2 pr-2 whitespace-nowrap">
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="block truncate text-sm font-medium">{name}</span>
+                    {me && <span className="block truncate text-xs text-sidebar-foreground/70">{me.role.name}</span>}
+                  </span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={10}>{`${name} · account`}</TooltipContent>
+            </Tooltip>
             <MenuPrimitive.Portal>
               <MenuPrimitive.Positioner side={collapsed ? "right" : "top"} align={collapsed ? "end" : "start"} sideOffset={8} className="isolate z-50">
-                <MenuPrimitive.Popup className="min-w-56 origin-(--transform-origin) rounded-lg bg-popover p-1 text-popover-foreground shadow-lg outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95">
+                <MenuPrimitive.Popup className="w-(--anchor-width) min-w-56 origin-(--transform-origin) rounded-lg bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+                  {me && (
+                    <div className="px-2 py-1.5 leading-tight">
+                      <div className="truncate text-sm font-medium">{me.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">{me.role.name}</div>
+                    </div>
+                  )}
+                  {me && <MenuPrimitive.Separator className="-mx-1 my-1 h-px bg-border" />}
                   {collapsed && (
                     <MenuPrimitive.Item onClick={toggleTheme} className={ITEM}>
-                      {theme === "dark" ? <Sun aria-hidden /> : <Moon aria-hidden />}{theme === "dark" ? "Light mode" : "Dark mode"}
+                      {theme === "dark" ? <Sun aria-hidden /> : <Moon aria-hidden />}
+                      {theme === "dark" ? "Light mode" : "Dark mode"}
                     </MenuPrimitive.Item>
                   )}
-                  <MenuPrimitive.Item onClick={onLogout} className={cn(ITEM, "text-destructive data-highlighted:bg-destructive/10")}>
-                    <LogOut aria-hidden />Sign out
+                  <MenuPrimitive.Item onClick={onLogout} className={cn(ITEM, "text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive")}>
+                    <LogOut aria-hidden />
+                    Sign out
                   </MenuPrimitive.Item>
                 </MenuPrimitive.Popup>
               </MenuPrimitive.Positioner>
             </MenuPrimitive.Portal>
           </MenuPrimitive.Root>
-          <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            className="mr-2 flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/80 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring active:translate-y-px in-data-[sidebar=collapsed]:lg:hidden">
+          <button type="button" onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="mr-2 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground/80 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring in-data-[sidebar=collapsed]:lg:hidden">
             {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>
         </div>
