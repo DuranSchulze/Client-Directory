@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { withTransaction } from "@/db";
 import { encryptAccountNo } from "@/lib/crypto/account-no";
 import { IMPORT_LIMITS, type ImportResult } from "@/lib/import/contract";
@@ -59,8 +60,14 @@ export async function importWorkbook(data: Buffer, check: boolean, userEmail: st
     return { result };
   });
   if (process.env.AUTO_DISTRIBUTE === "1") {
-    try { await distributeMatches(); }
-    catch { console.error("Automatic contact distribution failed after import"); }
+    try {
+      after(async () => {
+        try { await distributeMatches(); }
+        catch { console.error("Automatic contact distribution failed after import"); }
+      });
+    } catch {
+      console.error("Could not schedule automatic contact distribution after import");
+    }
   }
   return committed;
 }

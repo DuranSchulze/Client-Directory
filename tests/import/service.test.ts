@@ -3,8 +3,9 @@ import * as XLSX from "xlsx";
 import { decryptAccountNo } from "@/lib/crypto/account-no";
 
 const m = vi.hoisted(() => ({
-  updateContact: vi.fn(), deleteContact: vi.fn(), distribute: vi.fn(), log: vi.fn(), transaction: vi.fn(), lock: vi.fn(), snapshot: vi.fn(), companies: vi.fn(), contacts: vi.fn(), dept: vi.fn(), suppliers: vi.fn(), probity: vi.fn(), updateCompany: vi.fn(), updateProbity: vi.fn(), updateSupplier: vi.fn(), refresh: vi.fn(), trace: [] as string[],
+  afterResponse: vi.fn<(callback: () => Promise<void>) => void>(), updateContact: vi.fn(), deleteContact: vi.fn(), distribute: vi.fn(), log: vi.fn(), transaction: vi.fn(), lock: vi.fn(), snapshot: vi.fn(), companies: vi.fn(), contacts: vi.fn(), dept: vi.fn(), suppliers: vi.fn(), probity: vi.fn(), updateCompany: vi.fn(), updateProbity: vi.fn(), updateSupplier: vi.fn(), refresh: vi.fn(), trace: [] as string[],
 }));
+vi.mock("next/server", () => ({ after: m.afterResponse }));
 vi.mock("@/repositories/contacts.repository", () => ({ updateContact: m.updateContact, deleteContact: m.deleteContact }));
 vi.mock("@/services/distribute.service", () => ({ distributeMatches: m.distribute }));
 vi.mock("@/db", () => ({ db: {}, withTransaction: m.transaction }));
@@ -124,7 +125,7 @@ it("logs exactly one changes summary using the commit transaction, including emp
   expect(Object.values(response.result.changes).every((c) => c.inserted === 0 && c.updated === 0)).toBe(true);
 });
 
-it("runs distribution only after commit and retains the response when distribution throws", async () => {
+it("returns the committed result before starting distribution and logs a later failure", async () => {
   vi.stubEnv("AUTO_DISTRIBUTE", "1");
   m.transaction.mockImplementation(async (fn) => { const result = await fn({ transaction: true }); m.trace.push("committed"); return result; });
   m.distribute.mockImplementation(async () => { m.trace.push("distribution"); throw new Error("Failed distribution"); });
@@ -133,6 +134,10 @@ it("runs distribution only after commit and retains the response when distributi
     const { importWorkbook } = await import("@/services/import.service");
     const response = await importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx");
     expect(response).toHaveProperty("result");
+    expect(m.trace.at(-1)).toBe("committed");
+    expect(m.afterResponse).toHaveBeenCalledTimes(1);
+    expect(m.distribute).not.toHaveBeenCalled();
+    await m.afterResponse.mock.calls[0][0]();
     expect(m.trace.slice(-2)).toEqual(["committed", "distribution"]);
     expect(log).toHaveBeenCalledWith("Automatic contact distribution failed after import");
     expect(m.log).toHaveBeenCalledTimes(1);
@@ -145,6 +150,7 @@ it("does not trigger distribution for preview, rollback or default-off commits",
   await importWorkbook(workbook(), true, "admin@example.test", "synthetic.xlsx");
   m.probity.mockRejectedValueOnce(new Error("Rollback"));
   await expect(importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx")).rejects.toThrow("Rollback");
+  expect(m.afterResponse).not.toHaveBeenCalled();
   expect(m.distribute).not.toHaveBeenCalled();
 });
 
