@@ -19,6 +19,11 @@ export type CompanyListItem = CompanyItem & { contacts: ContactItem[]; gmail: Gm
 export type CandidateItem = { id: number; fields: CandidateFields };
 export type Activity = {
   candidates: CandidateItem[]; stage: Stage | null; stageDates: Partial<Record<Stage, string>>;
+  summary: {
+    stage: Stage | null; firstContact: string | null; lastContact: string | null;
+    // Distinct raw items in the available timelines, capped by Scraper at 200 items per candidate.
+    messages: number; latestSubjects: string[];
+  };
   amounts: StageAmount[]; payments: Payment[]; timeline: { items: TimelineItem[]; truncated: boolean }; needsCheck: string[];
 };
 export type ProbityInput = {

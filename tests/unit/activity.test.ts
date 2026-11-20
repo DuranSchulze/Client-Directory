@@ -21,3 +21,26 @@ it("merges activity without replacing sheet engagement or duplicating linked can
   expect(result.payments).toHaveLength(1);
   expect(result.timeline.truncated).toBe(true);
 });
+
+it("summarizes distinct raw items and recent Gmail subjects from the available timelines", () => {
+  const item = (raw_item_id: number, date: string | null, snippet: string, mailbox = "sales@example.test") =>
+    ({ raw_item_id, date, snippet, mailbox, stage: "quoted", department: "Sales", amounts: [] });
+  const sep = " — ";
+  const timeline = (items: ReturnType<typeof item>[], truncated = false) => field({ items, truncated });
+  const newest = item(1, "2026-01-02T01:00:00Z", "Quote" + sep + "private" + sep + "body");
+  const result = mergeActivity([
+    { id: 1, fields: { ...candidates[0].fields, first_contact: field("2026-01-02T08:00:00+08:00"), timeline: timeline([
+      newest, item(2, "2026-01-02T08:30:00+08:00", "Invoice" + sep + "private"),
+      item(3, null, "Undated" + sep + "private"), item(4, null, "Fourth" + sep + "private"),
+    ], true) } },
+    { id: 2, fields: { ...candidates[1].fields, first_contact: field("2026-01-02T01:00:00Z"), timeline: timeline([
+      newest, item(5, "2026-01-01", "Quote" + sep + "duplicate subject"),
+      item(6, "2026-01-03", "Sheet row" + sep + "private", ""),
+      item(7, "2026-01-03", "body only"), item(8, "2026-01-03", sep.trimStart() + "blank subject body" + sep + "private"),
+      item(9, "2026-01-03", " " + sep + "private"),
+    ]) } },
+  ]);
+  expect(result.summary).toEqual({ stage: "paid", firstContact: "2026-01-02T08:00:00+08:00", lastContact: "2026-01-02T01:00:00Z", messages: 9, latestSubjects: ["Quote", "Invoice", "Undated"] });
+  expect(result.timeline.truncated).toBe(true);
+  expect(mergeActivity([]).summary).toEqual({ stage: null, firstContact: null, lastContact: null, messages: 0, latestSubjects: [] });
+});

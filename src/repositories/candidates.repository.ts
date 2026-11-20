@@ -10,7 +10,7 @@ const fields = sql<CandidateFields>`coalesce(${candidates.reviewed}, ${candidate
 const emails = sql`ARRAY(SELECT lower(jsonb_array_elements_text(CASE WHEN jsonb_typeof(${fields}->'emails'->'value') = 'array' THEN ${fields}->'emails'->'value' ELSE '[]'::jsonb END)))`;
 export async function listLinkedCandidates(companyId: number | undefined = undefined, ex: Executor = db) {
   return ex.selectDistinct({ companyId: contacts.companyId, id: candidates.id, fields }).from(candidates)
-    .innerJoin(contacts, sql`${contacts.emails} && ${emails}`).where(and(eq(candidates.reviewState, "approved"), companyId === undefined ? undefined : eq(contacts.companyId, companyId)))
+    .innerJoin(contacts, sql`${contacts.emails} && ${emails}`).where(and(inArray(candidates.reviewState, ["pending", "approved"]), companyId === undefined ? undefined : eq(contacts.companyId, companyId)))
     .orderBy(candidates.id, contacts.companyId).limit(5000);
 }
 export async function listUnlinkedCandidates(ex: Executor = db) {
