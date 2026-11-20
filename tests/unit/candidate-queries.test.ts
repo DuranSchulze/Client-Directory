@@ -10,7 +10,7 @@ it("links pending and approved candidates, coalesces reviewed fields, caps reads
   const { listLinkedCandidates, listUnlinkedCandidates, findApprovedCandidate } = await import("@/repositories/candidates.repository");
   const dialect = new PgDialect();
   await listLinkedCandidates(undefined, ex as unknown as Executor);
-  expect(dialect.sqlToQuery(ex.selectDistinct.mock.calls[0][0].fields).sql).toMatch(/coalesce\("candidates"\."reviewed", "candidates"\."fields"\)/);
+  expect(dialect.sqlToQuery(ex.selectDistinct.mock.calls[0][0].fields).sql).toMatch(/"candidates"\."fields" \|\| coalesce\(\(SELECT jsonb_object_agg\(key, jsonb_build_object\('value', value\)\)\s+FROM jsonb_each\("candidates"\."reviewed"\)/);
   expect(dialect.sqlToQuery(chain.innerJoin.mock.calls[0][1]).sql).toContain("&&");
   expect(dialect.sqlToQuery(chain.where.mock.calls[0][0]).params).toEqual(["pending", "approved"]);
   expect(chain.limit).toHaveBeenLastCalledWith(5000);
@@ -33,6 +33,6 @@ it("lists only pending and approved distributable candidates, preferring reviewe
   const { listDistributable } = await import("@/repositories/candidates.repository");
   await listDistributable(drizzle({ query } as never) as unknown as Executor);
   expect(query.mock.calls[0][1]).toEqual(["pending", "approved"]);
-  expect(query.mock.calls[0][0].text).toContain('coalesce("reviewed", "fields")');
+  expect(query.mock.calls[0][0].text).toContain('"fields" || coalesce((SELECT jsonb_object_agg(key, jsonb_build_object(\'value\', value))');
   expect(query.mock.calls[0][0].text).not.toContain("limit");
 });
