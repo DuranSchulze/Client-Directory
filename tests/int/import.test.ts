@@ -38,7 +38,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("import persistence", () => {
     const { db } = await import("@/db");
     const { master_uploads_tb } = await import("@/db/schema");
     const { eq } = await import("drizzle-orm");
-    const logs = () => db.select().from(master_uploads_tb).where(eq(master_uploads_tb.fileName, `${label}.xlsx`));
+    const logs = () => db.select().from(master_uploads_tb).where(eq(master_uploads_tb.fileName, `${label}.xlsx`)).orderBy(master_uploads_tb.id);
     const before = await readImportSnapshot();
     const preview = await importWorkbook(workbook(label), true, "integration@example.test", `${label}.xlsx`);
     expect("preview" in preview ? preview.preview.changes.companies.inserted : null).toBe(1);

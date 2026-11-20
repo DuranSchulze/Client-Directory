@@ -47,6 +47,31 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic distribution transact
     expect([first.id, second.id]).toContain(owners[0].companyId);
     expect((await distributeMatches()).added).toBe(0);
   }, 60000);
+  it("rejects a stale manual attachment to the company that already gained the auto-contact", async () => {
+    const { first, email } = await fixtures();
+    const { distributeMatches } = await import("@/services/distribute.service");
+    const { attachCandidate } = await import("@/services/needs-company.service");
+    const { listContacts } = await import("@/repositories/contacts.repository");
+    expect((await distributeMatches()).added).toBe(1);
+    await expect(attachCandidate(777, { companyId: first.id })).rejects.toMatchObject({ status: 409, field: "emails" });
+    expect((await listContacts(first.id)).filter((row) => row.emails.includes(email))).toHaveLength(1);
+  }, 60000);
+  it("links the distributed address even when the Scraper candidate has surrounding whitespace", async () => {
+    const { first, email } = await fixtures();
+    const { withTransaction } = await import("@/db");
+    const { sql } = await import("drizzle-orm");
+    const { distributeMatches } = await import("@/services/distribute.service");
+    const { listDistributable, listLinkedCandidates } = await import("@/repositories/candidates.repository");
+    const fields = { emails: { value: [` \t${email.toUpperCase()}\r\n`], source: "gmail", confidence: 1 } };
+    vi.mocked(listDistributable).mockResolvedValue([{ id: 777, fields }]);
+    expect((await distributeMatches()).added).toBe(1);
+    await withTransaction(async (tx) => {
+      // Shadow the external table with this session's fixture, without modifying Scraper data.
+      await tx.execute(sql`CREATE TEMP TABLE candidates (id bigint, review_state text, fields jsonb, reviewed jsonb) ON COMMIT DROP`);
+      await tx.execute(sql`INSERT INTO pg_temp.candidates (id, review_state, fields) VALUES (777, 'pending', ${JSON.stringify(fields)}::jsonb)`);
+      expect(await listLinkedCandidates(first.id, tx)).toMatchObject([{ companyId: first.id, id: 777 }]);
+    });
+  }, 60000);
   it("suppresses deleted automatic emails but still permits manual attachment", async () => {
     const { first, second, email } = await fixtures();
     const { distributeMatches } = await import("@/services/distribute.service");

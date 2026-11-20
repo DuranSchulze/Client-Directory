@@ -3,7 +3,7 @@ const m = vi.hoisted(() => ({ run: vi.fn() }));
 vi.mock("@/services/distribute.service", () => ({ distributeMatches: m.run }));
 beforeEach(() => { vi.useFakeTimers(); vi.resetAllMocks(); vi.stubEnv("NEXT_RUNTIME", "nodejs"); vi.stubEnv("NODE_ENV", "production"); vi.stubEnv("VITEST", ""); vi.stubEnv("VERCEL", ""); vi.stubEnv("NEXT_PHASE", ""); vi.stubEnv("AUTO_DISTRIBUTE", "1"); m.run.mockResolvedValue({}); });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllEnvs(); });
-it.each([[undefined, 15], ["2", 5], ["20", 20], ["bad", 15]])("schedules %s at %s minutes", async (value, minutes) => {
+it.each([[undefined, 15], ["2", 5], ["20", 20], ["bad", 15], ["40000", 15]])("schedules %s at %s minutes", async (value, minutes) => {
   vi.stubEnv("DISTRIBUTE_EVERY_MINUTES", value);
   const { register } = await import("@/instrumentation"); await register();
   await vi.advanceTimersByTimeAsync(minutes * 60_000 - 1); expect(m.run).not.toHaveBeenCalled();

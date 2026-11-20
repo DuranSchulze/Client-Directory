@@ -86,6 +86,7 @@ it("attaches all approved-candidate emails as cc after checking ownership", asyn
   m.listContacts.mockResolvedValue([]);
   expect(await attachCandidate(3, { companyId: 1 })).toMatchObject({ companyId: 1, emails: ["new@example.com"], billingRole: "cc" });
   expect(m.lockEmailOwnership.mock.invocationCallOrder[0]).toBeLessThan(m.findApprovedCandidate.mock.invocationCallOrder[0]);
+  expect(m.findEmailOwner).toHaveBeenCalledWith(["new@example.com"], undefined, expect.anything());
   expect(m.insertContact).toHaveBeenCalledWith(expect.objectContaining({ billingRole: "cc" }), expect.anything());
   m.findEmailOwner.mockResolvedValueOnce({ name: "Other", companyId: 2 });
   await expect(attachCandidate(3, { companyId: 1 })).rejects.toMatchObject({ status: 409 });

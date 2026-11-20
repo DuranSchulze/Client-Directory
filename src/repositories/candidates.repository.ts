@@ -7,7 +7,8 @@ import { dept_emails_tb as dept } from "@/db/schema/dept-emails";
 import type { CandidateFields } from "@/lib/candidate-types";
 
 const fields = sql<CandidateFields>`coalesce(${candidates.reviewed}, ${candidates.fields})`;
-const emails = sql`ARRAY(SELECT lower(jsonb_array_elements_text(CASE WHEN jsonb_typeof(${fields}->'emails'->'value') = 'array' THEN ${fields}->'emails'->'value' ELSE '[]'::jsonb END)))`;
+// Match the whitespace accepted by JavaScript normEmail().
+const emails = sql`ARRAY(SELECT lower(btrim(email, U&' \\0009\\000A\\000B\\000C\\000D\\00A0\\1680\\2000\\2001\\2002\\2003\\2004\\2005\\2006\\2007\\2008\\2009\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF')) FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(${fields}->'emails'->'value') = 'array' THEN ${fields}->'emails'->'value' ELSE '[]'::jsonb END) AS candidate_email(email) WHERE email IS NOT NULL)`;
 export async function listLinkedCandidates(companyId: number | undefined = undefined, ex: Executor = db) {
   return ex.selectDistinct({ companyId: contacts.companyId, id: candidates.id, fields }).from(candidates)
     .innerJoin(contacts, sql`${contacts.emails} && ${emails}`).where(and(inArray(candidates.reviewState, ["pending", "approved"]), companyId === undefined ? undefined : eq(contacts.companyId, companyId)))

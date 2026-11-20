@@ -34,7 +34,7 @@ export async function attachCandidate(candidateId: number, body: unknown) {
     const addresses = emails(Array.isArray(raw) ? raw.filter((email): email is string => typeof email === "string" && EMAIL_RE.test(normEmail(email))).map(normEmail) : []);
     if (!addresses.length) throw new AppError(400, "Candidate has no email addresses", "emails");
     if (!await findCompany(companyId, tx)) throw new AppError(404, "Client not found");
-    await assertEmailsAvailable(addresses, companyId, tx);
+    await assertEmailsAvailable(addresses, undefined, tx);
     const contact = await insertContact({ companyId, emails: addresses, name: candidate.fields.name?.value ?? null, billingRole: "cc" }, tx);
     await refreshProbityMatches(tx);
     return contactDto(contact);

@@ -151,3 +151,17 @@ it("can assign a scraper-owned email to a workbook department mailbox", () => {
   expect(plan.deptEmails[0].values.emails).toEqual(["dept@acme.test"]);
   expect(plan.preview.moves[0].toCompanyId).toBeNull();
 });
+
+it("keeps the final address on a promoted auto-added main contact and flags the skipped move", () => {
+  const old = snapshot();
+  old.companies = [company(), { ...company(), id: 2, name: "Other", nameKey: "other" }];
+  old.contacts = [{ id: 1, companyId: 2, name: null, designation: null, emails: ["first@acme.test", "last@acme.test"], phones: [], billingRole: "main", source: "scraper", updatedAt: new Date() }];
+  const plan = planImport(parse({
+    "All Clients Database": [["REGISTERED NAME", "EMAIL ADDRESS"], ["Acme", "last@acme.test"]],
+    "All Dept. Emails": [["Department", "Name", "Email Address"], ["Legal", "Staff", "first@acme.test"]],
+  }), old);
+  expect(plan.contactUpdates).toEqual([{ id: 1, emails: ["last@acme.test"] }]);
+  expect(plan.contacts).toEqual([]);
+  expect(plan.preview.moves).toEqual([{ email: "first@acme.test", fromCompanyId: 2, toCompanyId: null }]);
+  expect(plan.preview.buckets.sharedEmails[0]?.reason).toMatch(/Make another contact main/);
+});

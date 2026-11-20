@@ -46,20 +46,22 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
   const reclaimed = new Set<string>();
   const reclaim = (email: string, target: number | null) => {
     const holders = snapshot.contacts.filter((row) => row.emails.some((e) => lower(e) === email));
-    if (reclaimed.has(email) || !holders.length || holders.some((row) => row.source !== "scraper" || row.companyId === target)) return false;
+    if (reclaimed.has(email) || !holders.length || holders.some((row) => row.source !== "scraper" || row.companyId === target)) return "conflict";
+    if (holders.some((row) => row.billingRole === "main" && (contactUpdates.get(row.id) ?? row.emails).every((e) => lower(e) === email))) return "main";
     reclaimed.add(email);
     for (const row of holders) {
       contactUpdates.set(row.id, (contactUpdates.get(row.id) ?? row.emails).filter((e) => lower(e) !== email));
       if (!moves.some((move) => move.email === email && move.fromCompanyId === row.companyId)) moves.push({ email, fromCompanyId: row.companyId, toCompanyId: target });
     }
     owners.delete(email);
-    return true;
+    return "moved";
   };
   const internal = new Set([...snapshot.deptEmails.flatMap((row) => row.emails), ...parsed.deptEmails.flatMap(({ value }) => value.emails ?? [])].map(lower));
   const deptOwned = new Map(snapshot.deptEmails.flatMap((row) => row.emails.map((email) => [lower(email), row.id] as const)));
   const hasMain = new Set(snapshot.contacts.filter((row) => row.billingRole === "main").map((row) => row.companyId));
   const hasContacts = new Set(snapshot.contacts.map((row) => row.companyId));
   const flag = (bucket: keyof typeof buckets, source: Source, reason: string, field?: string) => buckets[bucket].push({ ...source, reason, ...(field ? { field } : {}) });
+  const mainConflict = "Make another contact main on the current client before moving this email";
   for (const source of parsed.deptEmails) {
     const incoming = { ...source.value };
     const named = !!lower(incoming.name);
@@ -68,7 +70,13 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
     incoming.emails = (incoming.emails ?? []).filter((email) => {
       const owner = deptOwned.get(lower(email));
       if (owner !== undefined && owner !== old?.id) { flag("internalEmails", source, "Department email already belongs to another mailbox; address skipped", "emails"); return false; }
-      if (owners.has(lower(email)) && !reclaim(lower(email), null)) { flag("internalEmails", source, "Department email already belongs to a client; address skipped", "emails"); return false; }
+      if (owners.has(lower(email))) {
+        const outcome = reclaim(lower(email), null);
+        if (outcome !== "moved") {
+          flag("internalEmails", source, outcome === "main" ? mainConflict : "Department email already belongs to a client; address skipped", "emails");
+          return false;
+        }
+      }
       return true;
     });
     if (source.value.emails?.length && !incoming.emails.length) continue;
@@ -130,9 +138,13 @@ export function planImport(parsed: ParsedImport, snapshot: ImportSnapshot): Impo
         email = lower(email);
         if (internal.has(email)) { flag("internalEmails", source, "Internal email excluded from client contacts", "emails"); return false; }
         const owner = owners.get(email);
-        if (owner !== undefined && (owner === current!.id || !reclaim(email, current!.id))) {
-          if (owner !== current!.id) flag("sharedEmails", source, "Email already belongs to another client; later occurrence skipped", "emails");
-          return false;
+        if (owner === current!.id) return false;
+        if (owner !== undefined) {
+          const outcome = reclaim(email, current!.id);
+          if (outcome !== "moved") {
+            flag("sharedEmails", source, outcome === "main" ? mainConflict : "Email already belongs to another client; later occurrence skipped", "emails");
+            return false;
+          }
         }
         owners.set(email, current!.id); return true;
       });

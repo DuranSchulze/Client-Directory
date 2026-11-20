@@ -18,7 +18,8 @@ it("links pending and approved candidates, coalesces reviewed fields, caps reads
   const unlinked = dialect.sqlToQuery(chain.where.mock.calls[1][0]);
   expect(unlinked.sql).toContain('NOT EXISTS (SELECT 1 FROM "contacts"');
   expect(unlinked.sql).toContain('NOT EXISTS (SELECT 1 FROM "dept_emails"');
-  expect(unlinked.sql).toMatch(/cardinality\(ARRAY\(SELECT lower\(jsonb_array_elements_text/);
+  expect(unlinked.sql).toContain("cardinality(ARRAY(SELECT lower(btrim(email,");
+  expect(dialect.sqlToQuery(chain.innerJoin.mock.calls[0][1]).sql).toContain("lower(btrim(email, U&' \\0009");
   expect(unlinked.sql).toContain('> 0');
   expect(unlinked.params).toContain("approved");
   expect(chain.limit).toHaveBeenLastCalledWith(5000);
