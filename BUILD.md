@@ -290,8 +290,9 @@ FROM contacts ct JOIN cand ON ct.emails && cand.emails;
 2. Else, its email domain is on any client's contacts and is not free mail or internal: `'domain'`, `master_ids` = every client with that domain.
    - **Free mail:** the domain is in the Scraper's `merge.FREE_MAIL` list, or its first label is a free-mail provider (`yahoo, ymail, rocketmail, hotmail, outlook, live, msn, gmail, googlemail, aol, icloud, me, mac, proton, protonmail, gmx, mail, zoho, yandex`), so `yahoo.com.ph` and `hotmail.co.uk` never match. **Internal:** the Scraper's `INTERNAL_DOMAINS`.
 3. Else no tag. Tags exist only while the candidate is pending; approve, reject and merge clear them, and reopening retags.
-- **When it runs:** a full retag at the end of every Scraper scrape run (it reads the current `companies` + `contacts`), and an incremental retag for the candidates each extraction batch rebuilds. A directory import or contact edit is reflected at the next scrape run (the Scraper's schedule interval).
-- Real-file baseline (2026-11-12, Scraper interim import): 1,492 clients and 1,601 unique emails tagged 986 pending candidates by email and 1,355 by domain, out of 10,701.
+- **When it runs:** a full retag at the end of every Scraper scrape or extract job (it reads the current `companies` + `contacts`), and an incremental retag for the candidates each extraction batch rebuilds. A directory import or contact edit is reflected at the next scrape run (the Scraper's schedule interval). If either table is missing, the Scraper clears all tags instead of failing.
+- `master_names` on the Scraper's Review rows are `companies.name`; `GET /api/master/summary` reports directory counts, tag counts and the last full retag time (`tagged_at`).
+- Baseline (2026-11-13, directory tables, dev DB): 1,470 companies and 1,605 contacts tagged 1,001 pending candidates by email and 1,424 by domain. A full retag takes about 0.4 s.
 
 **Probity → client** (the cross-check). For each probity row, match in this order and store the first hit in `company_id` / `matched_by`:
 1. Any probity email equals a contact email: `email`.
@@ -384,7 +385,7 @@ Sidebar (pages only):
 
 Use the starter kit's `xlsx-import-dialog` with the `xlsx` package. The admin uploads the file, sees a **preview** per tab, then commits in one transaction.
 
-This is the **only** master-list upload. The commit writes `companies` + `contacts`, which the Scraper reads for its tags, so there is nothing to upload to the Scraper. The Scraper's interim import (`POST /api/master/import`, `python -m scraper.master import`, tables `master_clients` / `master_imports`) exists only until this import ships and is retired at cut-over (section 7).
+This is the **only** master-list upload. The commit writes `companies` + `contacts`, which the Scraper reads for its tags, so there is nothing to upload to the Scraper. The Scraper's interim import (its import route, CLI and `master_clients` / `master_imports` tables) was retired on 2026-11-13 (Scraper migration 012).
 
 The preview shows:
 - Rows and clients.
@@ -424,8 +425,8 @@ Cleaning rules:
 ## 7. Cut-over
 
 1. Push the schema with permission, then import with preview, then commit.
-   - **Scraper switch, same release window** (a backend change made in the Scraper repo): its retag reads `companies` + `contacts` in place of `master_clients`, `master_ids` point at `companies.id`, a full retag runs at the end of every scrape run (today it runs only after the interim import), then drop `master_clients` / `master_imports`, the interim import route and CLI, and the `masterlist` role grant.
-   - Then turn the Scraper's match UI on: `NEXT_PUBLIC_MASTER_MATCH=1` in the Scraper frontend env, rebuild. Until then its Review page hides the tags.
+   - **Scraper switch: done 2026-11-13** (Scraper migration 012). Its retag reads `companies` + `contacts`, `master_ids` point at `companies.id`, a full retag runs at the end of every scrape run, and `master_clients` / `master_imports`, the interim import route and CLI, and the `masterlist` role grant are gone. The match UI is always on; the `NEXT_PUBLIC_MASTER_MATCH` flag is removed.
+   - On production, deploy the Scraper (which applies 012) only after the directory tables exist there; before that it shows no tags.
    - Check: the Scraper's pending tag counts are close to the baseline in section 4 (they move as new mail is scraped).
 2. Spot-check 10 clients against the sheet, including one with packed Main + cc contacts and one with two intercompany entities.
 3. Resolve every probity row marked "Not found".
