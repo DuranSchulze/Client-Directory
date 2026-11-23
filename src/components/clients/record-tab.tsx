@@ -1,6 +1,7 @@
 import type { CompanyDetail } from "@/lib/api-types";
 import { DASH, orDash, stamp } from "@/lib/format";
 import { Section } from "./client-sheet";
+import { SourceBadges } from "./source-badge";
 
 const MATCHED: Record<string, string> = { email: "by contact email", name: "by registered name, alias or trade name", manual: "set by hand" };
 
@@ -12,6 +13,7 @@ export function RecordTab({ detail }: { detail: CompanyDetail }) {
         <dl className="grid grid-cols-[7.5rem_1fr] gap-x-4 gap-y-2 text-sm">
           <dt className="text-muted-foreground">Client id</dt><dd className="font-mono tabular-nums">{c.id}</dd>
           <dt className="text-muted-foreground">Name key</dt><dd className="font-mono break-all">{c.nameKey}</dd>
+          <dt className="text-muted-foreground">Source</dt><dd><SourceBadges company={{ createdBy: c.createdBy, contacts: detail.contacts, probity: detail.probity.length > 0 }} /></dd>
           <dt className="text-muted-foreground">Created by</dt><dd>{orDash(c.createdBy)}</dd>
           <dt className="text-muted-foreground">Created</dt><dd className="tabular-nums">{stamp(c.createdAt)}</dd>
           <dt className="text-muted-foreground">Updated</dt><dd className="tabular-nums">{stamp(c.updatedAt)}</dd>

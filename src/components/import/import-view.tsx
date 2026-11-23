@@ -23,7 +23,7 @@ const BUCKETS: { key: keyof ImportBuckets; label: string; what: string; warn: bo
   { key: "mergedSpellings", label: "Merged spellings", what: "Rows with the same normalized name; later rows fill the first.", warn: false },
   { key: "unmatchedHeaders", label: "Unmatched headers", what: "Columns the import does not read.", warn: false },
 ];
-const TABLES = [["companies", "Clients"], ["contacts", "Contacts"], ["probity", "Probity rows"], ["suppliers", "Suppliers"], ["deptEmails", "Dept. emails"]] as const;
+const TABLES = [["companies", "Clients"], ["contacts", "Contacts"], ["probity", "Probity rows"], ["suppliers", "Suppliers"], ["deptEmails", "Department emails"]] as const;
 
 type Step = { kind: "pick" } | { kind: "checking"; file: File } | { kind: "preview"; file: File; preview: ImportPreview } | { kind: "committing"; file: File; preview: ImportPreview } | { kind: "done"; result: ImportResult };
 

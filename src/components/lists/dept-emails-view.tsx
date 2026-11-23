@@ -14,6 +14,7 @@ import { errorMessage, request } from "@/lib/api/http";
 import { deptEmailsQuery, keys } from "@/lib/api/queries";
 import type { DeptEmailInput, DeptEmailItem, DeptEmailResponse } from "@/lib/api-types";
 import { DASH } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export function DeptEmailsView() {
   const qc = useQueryClient();
@@ -23,10 +24,12 @@ export function DeptEmailsView() {
   // Department order as the sheet lists it, then people by sort order.
   const all = useMemo(() => [...(data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id), [data]);
   const departments = useMemo(() => [...new Set(all.map((d) => d.department))], [all]);
+  const [dept, setDept] = useState("");
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? all.filter((x) => [x.department, x.name, x.title, ...x.emails].some((v) => v?.toLowerCase().includes(s))) : all;
-  }, [all, q]);
+    return all.filter((x) => (!dept || x.department === dept) && (!s || [x.department, x.name, x.title, ...x.emails].some((v) => v?.toLowerCase().includes(s))));
+  }, [all, q, dept]);
+  const countOf = (d: string) => all.filter((x) => x.department === d).length;
 
   const fields: RecordField[] = [
     { key: "department", label: "Department", required: true, full: true, hint: departments.length ? `Existing: ${departments.slice(0, 4).join(", ")}${departments.length > 4 ? "…" : ""}` : undefined },
@@ -46,19 +49,33 @@ export function DeptEmailsView() {
   const columns: Column<DeptEmailItem>[] = [
     { key: "name", header: "Name", className: "min-w-[10rem] font-semibold", render: (d) => d.name ?? <span className="font-normal text-muted-foreground">Shared mailbox</span> },
     { key: "title", header: "Title", desktopOnly: true, className: "text-muted-foreground", render: (d) => d.title ?? DASH },
-    { key: "emails", header: "Email addresses", render: (d) => <div className="flex flex-col">{d.emails.map((e) => <span key={e} className="break-all">{e}</span>)}</div> },
+    { key: "emails", header: "Email addresses", render: (d) => <div className="flex flex-wrap gap-1.5">{d.emails.map((e) => <span key={e} className="rounded-md bg-sunk px-2 py-0.5 text-[13px] break-all">{e}</span>)}</div> },
   ];
 
   return (
     <PageShell>
-      <PageHeader title="Dept. emails" description="Internal staff and shared mailboxes. These addresses are never clients and never land in Needs company."
+      <PageHeader title="Department emails" description="Internal staff and shared mailboxes. These addresses are never clients and never land in Needs company."
         actions={<Button onClick={() => setEditing("new")}><Plus />Add mailbox</Button>} />
+      {departments.length > 1 && (
+        <div role="group" aria-label="Filter by department" className="flex flex-wrap gap-2">
+          {[{ name: "", label: "All departments", n: all.length }, ...departments.map((d) => ({ name: d, label: d, n: countOf(d) }))].map(({ name, label, n }) => {
+            const on = dept === name;
+            return (
+              <button key={name || "all"} type="button" aria-pressed={on} onClick={() => setDept(name)}
+                className={cn("inline-flex h-8 items-center gap-2 rounded-full border border-input px-3 text-xs font-semibold transition-transform outline-none hover:-translate-y-0.5 active:translate-y-0 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+                  on ? "border-transparent bg-primary text-primary-foreground" : "bg-card text-foreground")}>
+                {label}<span className={cn("tabular-nums", on ? "opacity-80" : "text-muted-foreground")}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <DataTableCard title="Internal mailboxes" rows={rows} total={all.length} columns={columns} getRowId={(d) => d.id} itemLabel="mailboxes" showRowNumbers={false}
         groupBy={(d) => d.department}
         loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
         onRowClick={(d) => setEditing(d)} rowLabel={(d) => `Edit ${d.name ?? d.emails[0]}`}
         search={<TableSearch value={q} onChange={setQ} placeholder="Search department, name, email" />}
-        empty={q ? <EmptyState icon={SearchX} title="No mailboxes match this search." actionLabel="Clear search" onAction={() => setQ("")} />
+        empty={q || dept ? <EmptyState icon={SearchX} title="No mailboxes match these filters." actionLabel="Clear filters" onAction={() => { setQ(""); setDept(""); }} />
           : <EmptyState icon={Contact} title="No internal mailboxes yet." description="They arrive with the Excel import, or add one by hand." actionLabel="Add mailbox" onAction={() => setEditing("new")} />} />
       <RecordDialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }} fields={fields}
         title={editing === "new" ? "Add internal mailbox" : "Edit internal mailbox"} submitLabel={editing === "new" ? "Add mailbox" : "Save mailbox"}

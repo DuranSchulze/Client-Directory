@@ -28,7 +28,7 @@ const NAV: { href: string; label: string; icon: React.ElementType; route: RouteK
   { href: "/probity", label: "Probity", icon: ShieldCheck, route: "directory", badge: (c) => c ? (c.probityUnmatched ? { value: c.probityUnmatched, hot: true } : { value: c.probity, hot: false }) : null },
   { href: "/needs-company", label: "Needs company", icon: Inbox, route: "directory", badge: (c) => c ? { value: c.needsCompany, hot: c.needsCompany > 0 } : null },
   { href: "/suppliers", label: "OPS suppliers", icon: Truck, route: "directory", badge: (c) => c ? { value: c.suppliers, hot: false } : null },
-  { href: "/dept-emails", label: "Dept. emails", icon: Contact, route: "directory", badge: (c) => c ? { value: c.deptEmails, hot: false } : null },
+  { href: "/dept-emails", label: "Department emails", icon: Contact, route: "directory", badge: (c) => c ? { value: c.deptEmails, hot: false } : null },
   { href: "/import", label: "Import", icon: FileSpreadsheet, route: "import", badge: none },
   { href: "/accounts", label: "Accounts", icon: UsersRound, route: "accounts", badge: none },
 ];

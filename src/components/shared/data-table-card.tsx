@@ -79,19 +79,19 @@ export function DataTableCard<T>({
       </div>
       {error ? <ErrorState message={error} onRetry={onRetry} /> : loading ? <PlaceholderRows /> : rows.length === 0 ? empty : (
         <Loadable loading={!!refetching}>
-          <div className="overflow-x-auto px-2">
-            <table className="w-full border-separate border-spacing-y-0.5 text-sm">
+          <div>
+            <div className="overflow-x-auto">
+            <table className="w-full border-separate border-spacing-0 text-sm">
               <thead>
                 <tr>
-                  {showRowNumbers && <th scope="col" className="hidden w-10 rounded-l-lg bg-head py-2.5 pr-1 pl-3 text-right text-xs font-bold md:table-cell"><span className="sr-only">Row</span>#</th>}
-                  {columns.map((c, i) => {
+                  {showRowNumbers && <th scope="col" className="hidden w-10 bg-head py-2.5 pr-1 pl-3 text-right text-xs font-bold md:table-cell"><span className="sr-only">Row</span>#</th>}
+                  {columns.map((c) => {
                     const dir = sort?.key === c.key ? sort.dir : null;
                     const Icon = dir === "asc" ? ArrowUp : dir === "desc" ? ArrowDown : ArrowUpDown;
                     return (
                       <th key={c.key} scope="col" aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : c.sortValue ? "none" : undefined}
                         className={cn("bg-head px-3 py-2.5 text-left text-xs font-bold tracking-wide whitespace-nowrap",
-                          i === 0 && !showRowNumbers && "rounded-l-lg", i === 0 && showRowNumbers && "max-md:rounded-l-lg",
-                          i === columns.length - 1 && "rounded-r-lg", dir && "bg-[color-mix(in_srgb,var(--primary)_14%,var(--head))] text-primary-text",
+                          dir && "bg-[color-mix(in_srgb,var(--primary)_14%,var(--head))] text-primary-text",
                           c.desktopOnly && "hidden md:table-cell", c.className)}>
                         {c.sortValue ? (
                           <button type="button" onClick={() => cycle(c.key)} className="inline-flex items-center gap-1.5 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -110,17 +110,16 @@ export function DataTableCard<T>({
                   return [
                     showGroup && (
                       <tr key={`g-${group}-${i}`}>
-                        <th colSpan={columns.length + (showRowNumbers ? 1 : 0)} scope="rowgroup" className="px-3 pt-5 pb-1.5 text-left text-[13px] font-bold">{group}</th>
+                        <th colSpan={columns.length + (showRowNumbers ? 1 : 0)} scope="rowgroup" className="bg-sunk px-3 py-2 text-left text-[13px] font-bold">{group}</th>
                       </tr>
                     ),
                     <tr key={getRowId(row)} tabIndex={onRowClick ? 0 : undefined} aria-label={onRowClick && rowLabel ? rowLabel(row) : undefined}
                       onClick={onRowClick ? () => onRowClick(row) : undefined}
                       onKeyDown={onRowClick ? (e) => { if (rowKeyActivates(e)) { e.preventDefault(); onRowClick(row); } } : undefined}
                       className={cn("group/row", onRowClick && "cursor-pointer outline-none focus-visible:[&>td]:bg-lift", rowClassName?.(row))}>
-                      {showRowNumbers && <td className="hidden rounded-l-lg py-3 pr-1 pl-3 text-right text-muted-foreground tabular-nums group-hover/row:bg-lift md:table-cell">{start + i + 1}</td>}
-                      {columns.map((c, ci) => (
+                      {showRowNumbers && <td className="hidden py-3 pr-1 pl-3 text-right text-muted-foreground tabular-nums transition-colors group-hover/row:bg-lift md:table-cell">{start + i + 1}</td>}
+                      {columns.map((c) => (
                         <td key={c.key} className={cn("px-3 py-3 align-middle transition-colors group-hover/row:bg-lift",
-                          ci === 0 && !showRowNumbers && "rounded-l-lg", ci === 0 && showRowNumbers && "max-md:rounded-l-lg", ci === columns.length - 1 && "rounded-r-lg",
                           c.desktopOnly && "hidden md:table-cell", c.className)}>
                           {c.render(row, start + i)}
                         </td>
@@ -130,6 +129,7 @@ export function DataTableCard<T>({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-3 pb-4 text-xs text-muted-foreground">
             <span className="hidden sm:inline">Showing {start + 1} to {Math.min(start + size, sorted.length)} of {sorted.length} {itemLabel}</span>

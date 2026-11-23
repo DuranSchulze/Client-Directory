@@ -90,7 +90,7 @@ function AddClientForm({ prefill, onCancel, onCreated }: { prefill?: ClientPrefi
           <Field id="new-designation" label="Designation">
             <input id="new-designation" value={contact.designation} onChange={(e) => setContact({ ...contact, designation: e.target.value })} className="field-input" />
           </Field>
-          <Field id="new-phone" label="Contact no." error={errors.phone}>
+          <Field id="new-phone" label="Contact number" error={errors.phone}>
             <input {...fieldProps("new-phone", errors.phone)} type="tel" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} className="field-input" />
           </Field>
         </div>

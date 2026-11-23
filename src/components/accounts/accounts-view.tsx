@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 
 const ROUTE_LABEL: Record<RouteKey, string> = { directory: "Directory", import: "Import", accounts: "Accounts" };
 const ROUTE_HINT: Record<RouteKey, string> = {
-  directory: "Clients, Probity, Needs company, OPS suppliers and Dept. emails.",
+  directory: "Clients, Probity, Needs company, OPS suppliers and Department emails.",
   import: "Upload the clients workbook.",
   accounts: "Manage accounts and roles.",
 };

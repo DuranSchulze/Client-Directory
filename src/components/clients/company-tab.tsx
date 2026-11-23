@@ -72,7 +72,7 @@ export function CompanyTab({ detail, onDirty, onOpenContacts, onOpenActivity }: 
         </div>
         <CompanyGroups groups={GROUPS} draft={draft} setDraft={setDraft} errors={errors} idPrefix="edit" />
         <div className="rounded-xl bg-sunk p-4 dark:bg-accent/60">
-          <Field id="edit-accountNo" label="Bank account no." error={errors.accountNo}
+          <Field id="edit-accountNo" label="Bank account number" error={errors.accountNo}
             hint={c.accountNoLast4 ? `Stored encrypted as •••• ${c.accountNoLast4}. Leave blank to keep it.` : "Stored encrypted; shown masked everywhere."}>
             <input {...fieldProps("edit-accountNo", errors.accountNo)} value={accountNo} autoComplete="off" inputMode="numeric"
               onChange={(e) => { setAccountNo(e.target.value); onDirty(true); }} className="field-input" />
@@ -165,7 +165,7 @@ function AccountRow({ companyId, last4 }: { companyId: number; last4: string | n
 
   return (
     <>
-      <dt className="text-muted-foreground">Account no.</dt>
+      <dt className="text-muted-foreground">Account number</dt>
       <dd className="flex flex-wrap items-center gap-2">
         {!last4 ? DASH : shown
           ? <><span className="font-mono tabular-nums" aria-live="polite">{shown}</span><span className="text-xs text-muted-foreground tabular-nums">hides in {left}s</span>

@@ -22,7 +22,7 @@ export const GROUPS: FieldGroup[] = [
   { title: "Engagement", fields: [
     { key: "engagement", label: "Engagement status", kind: "select", options: ENGAGEMENT_OPTIONS },
     { key: "isNew", label: "New client", kind: "bool" },
-    { key: "acctgService", label: "Acctg service" },
+    { key: "acctgService", label: "Accounting service" },
     { key: "efps", label: "EFPS / eBIR", kind: "select", options: EFPS_OPTIONS },
     { key: "supervisor", label: "Assigned supervisor" },
     { key: "assistant", label: "Assigned assistant" },
@@ -33,7 +33,7 @@ export const GROUPS: FieldGroup[] = [
     { key: "rdoCode", label: "RDO code" },
     { key: "zip", label: "Zip code" },
     { key: "address", label: "Registered address", kind: "textarea", full: true },
-    { key: "secNo", label: "SEC registration no." },
+    { key: "secNo", label: "SEC registration number" },
     { key: "incorporatedOn", label: "Date of incorporation", kind: "date" },
     { key: "registeredOn", label: "Company registration date", kind: "date" },
     { key: "yearEnd", label: "Year end", kind: "date" },
@@ -42,8 +42,8 @@ export const GROUPS: FieldGroup[] = [
     { key: "ptuLooseleaf", label: "PTU looseleaf" },
     { key: "ptuIssuedOn", label: "PTU issued", kind: "date" },
     { key: "orusRegistered", label: "ORUS registered" },
-    { key: "siEmail", label: "Email (for SI)", kind: "email" },
-    { key: "siAddress", label: "Address (for SI)", kind: "textarea", full: true },
+    { key: "siEmail", label: "Sales invoice email", kind: "email" },
+    { key: "siAddress", label: "Sales invoice address", kind: "textarea", full: true },
   ] },
   { title: "Billing check", fields: [
     { key: "lastCheckedBilling", label: "Date last checked", kind: "date" },

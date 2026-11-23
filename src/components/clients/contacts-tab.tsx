@@ -118,7 +118,7 @@ function AddContactForm({ companyId, first, onDone }: { companyId: number; first
       <Field id="ct-name" label="Contact name" error={errors.name}><input {...fieldProps("ct-name", errors.name)} value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} className="field-input" autoFocus /></Field>
       <Field id="ct-designation" label="Designation" error={errors.designation}><input {...fieldProps("ct-designation", errors.designation)} value={d.designation} onChange={(e) => setD({ ...d, designation: e.target.value })} className="field-input" /></Field>
       <Field id="ct-email" label="Email" required error={errors.email}><input {...fieldProps("ct-email", errors.email)} type="email" value={d.email} onChange={(e) => setD({ ...d, email: e.target.value })} className="field-input" /></Field>
-      <Field id="ct-phone" label="Contact no." error={errors.phone} hint="Saved in +63 format"><input {...fieldProps("ct-phone", errors.phone)} type="tel" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} className="field-input" /></Field>
+      <Field id="ct-phone" label="Contact number" error={errors.phone} hint="Saved in +63 format"><input {...fieldProps("ct-phone", errors.phone)} type="tel" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} className="field-input" /></Field>
       <Field id="ct-role" label="Billing" className="sm:col-span-2">
         <select id="ct-role" value={d.billingRole} onChange={(e) => setD({ ...d, billingRole: e.target.value as BillingRole })} className="field-select h-9 w-full bg-sunk dark:bg-field">
           <option value="main">Main (replaces the current main)</option><option value="cc">CC</option><option value="none">Not on billing</option>
