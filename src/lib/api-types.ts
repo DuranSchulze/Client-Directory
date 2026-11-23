@@ -45,6 +45,7 @@ export type CompanyDetail = {
   company: CompanyItem; contacts: ContactItem[]; probity: ProbityItem[]; activity: Activity; reveals: { userEmail: string; at: string }[];
 };
 export type NeedsCompanyItem = CandidateItem & { suggestion: { companyId: number; name: string } | null };
+export type NeedsCompanyPage = { items: NeedsCompanyItem[]; total: number; suggested: number };
 export type AttachAllResult = { attached: number; skipped: number; contacts: { id: number; companyId: number }[] };
 export type LastMasterUpload = { at: string; by: string; fileName: string };
 export type MasterUploadResponse = ItemResponse<{ lastMasterUpload: LastMasterUpload | null }>;
@@ -76,7 +77,7 @@ export type SuppliersResponse = ListResponse<SupplierItem>;
 export type SupplierResponse = ItemResponse<SupplierItem>;
 export type DeptEmailsResponse = ListResponse<DeptEmailItem>;
 export type DeptEmailResponse = ItemResponse<DeptEmailItem>;
-export type NeedsCompanyResponse = ListResponse<NeedsCompanyItem>;
+export type NeedsCompanyResponse = NeedsCompanyPage;
 export type AttachBody = { companyId: number };
 export type RevealAccountResponse = ItemResponse<{ accountNo: string | null }>;
 export type CountsResponse = ItemResponse<Counts>;

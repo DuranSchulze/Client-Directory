@@ -2,8 +2,8 @@ import { withTransaction } from "@/db";
 import { AppError } from "@/lib/errors";
 import { contactDto } from "@/lib/dto";
 import { EMAIL_RE, isFreeMail, normEmail } from "@/lib/normalize";
-import type { CandidateItem, NeedsCompanyItem } from "@/lib/api-types";
-import { findApprovedCandidate, listUnlinkedCandidates } from "@/repositories/candidates.repository";
+import type { CandidateItem, NeedsCompanyItem, NeedsCompanyPage } from "@/lib/api-types";
+import { findApprovedCandidate, listUnlinkedCandidateEmails, listUnlinkedCandidates, pageUnlinkedCandidates } from "@/repositories/candidates.repository";
 import { findCompany, listCompanies } from "@/repositories/companies.repository";
 import { deleteContact, findContact, insertContact, listContacts } from "@/repositories/contacts.repository";
 import { lockEmailOwnership } from "@/repositories/ownership.repository";
@@ -11,18 +11,46 @@ import { assertEmailsAvailable } from "./contacts.service";
 import { refreshProbityMatches } from "./probity.service";
 import { emails, id, object } from "./validation.service";
 
+const emailDomain = (email: string) => email.toLowerCase().split("@")[1];
+
 export function domainCompanies(domains: Set<string>, contacts: { companyId: number; emails: string[] }[]) {
-  return new Set(contacts.filter((contact) => contact.emails.some((email) => domains.has(email.toLowerCase().split("@")[1]))).map((contact) => contact.companyId));
+  return new Set(contacts.filter((contact) => contact.emails.some((email) => domains.has(emailDomain(email)))).map((contact) => contact.companyId));
 }
 export function suggestCompany(candidate: CandidateItem, companies: { id: number; name: string }[], contacts: { companyId: number; emails: string[] }[]): NeedsCompanyItem["suggestion"] {
-  const domains = new Set((candidate.fields.emails?.value ?? []).map((email) => email.toLowerCase().split("@")[1]).filter((domain) => domain && !isFreeMail(domain)));
+  const domains = new Set((candidate.fields.emails?.value ?? []).map(emailDomain).filter((domain) => domain && !isFreeMail(domain)));
   const companyIds = domainCompanies(domains, contacts);
   const company = companies.find((company) => companyIds.has(company.id));
   return company ? { companyId: company.id, name: company.name } : null;
 }
-export async function getNeedsCompany(): Promise<NeedsCompanyItem[]> {
-  const [candidates, companies, contacts] = await Promise.all([listUnlinkedCandidates(), listCompanies(), listContacts()]);
-  return candidates.map((candidate) => ({ ...candidate, suggestion: suggestCompany(candidate, companies, contacts) }));
+export async function getNeedsCompany({ page, size, q }: { page: string | null; size: string | null; q: string | null }): Promise<NeedsCompanyPage> {
+  const pageNumber = Number(page ?? "1");
+  const limit = Number(size ?? "25");
+  const offset = (pageNumber - 1) * limit;
+  if (page !== null && (!/^\d+$/.test(page) || pageNumber < 1 || !Number.isSafeInteger(pageNumber))) {
+    throw new AppError(400, "Page must be a positive integer", "page");
+  }
+  if ((size !== null && !/^\d+$/.test(size)) || ![10, 25, 50, 100].includes(limit)) {
+    throw new AppError(400, "Size must be 10, 25, 50 or 100", "size");
+  }
+  if (!Number.isSafeInteger(offset)) throw new AppError(400, "Page is too large", "page");
+  const search = q?.trim() ?? "";
+  if (search.includes("\0")) throw new AppError(400, "Search cannot contain a NUL character", "q");
+
+  const [{ items, total }, queue, companies, contacts] = await withTransaction(async (tx) => {
+    await tx.setTransaction({ isolationLevel: "repeatable read", accessMode: "read only" });
+    return Promise.all([
+      pageUnlinkedCandidates(limit, offset, search, tx), listUnlinkedCandidateEmails(tx), listCompanies(tx), listContacts(undefined, tx),
+    ]);
+  });
+  const companyIds = new Set(companies.map((company) => company.id));
+  const contactDomains = new Set(contacts.filter((contact) => companyIds.has(contact.companyId))
+    .flatMap((contact) => contact.emails.map(emailDomain)).filter((domain) => domain && !isFreeMail(domain)));
+
+  return {
+    items: items.map((candidate) => ({ ...candidate, suggestion: suggestCompany(candidate, companies, contacts) })),
+    total,
+    suggested: queue.filter(({ emails }) => emails.some((email) => typeof email === "string" && contactDomains.has(emailDomain(email)))).length,
+  };
 }
 type Tx = Parameters<Parameters<typeof withTransaction>[0]>[0];
 const validEmails = (raw: unknown) => emails(Array.isArray(raw) ? raw.filter((email): email is string => typeof email === "string" && EMAIL_RE.test(normEmail(email))).map(normEmail) : []);

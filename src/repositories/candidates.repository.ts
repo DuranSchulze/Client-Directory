@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { db, type Executor } from "@/db";
 import { ext_candidates as candidates } from "@/db/external/candidates";
 import { contacts_tb as contacts } from "@/db/schema/contacts";
@@ -20,11 +20,30 @@ export async function listLinkedCandidates(companyId: number | undefined = undef
     .innerJoin(contacts, sql`${contacts.emails} && ${emails}`).where(and(inArray(candidates.reviewState, ["pending", "approved"]), companyId === undefined ? undefined : eq(contacts.companyId, companyId)))
     .orderBy(candidates.id, contacts.companyId).limit(5000);
 }
+const unlinked = and(eq(candidates.reviewState, "approved"),
+  sql`cardinality(${emails}) > 0`,
+  sql`NOT EXISTS (SELECT 1 FROM ${contacts} WHERE ${contacts.emails} && ${emails})`,
+  sql`NOT EXISTS (SELECT 1 FROM ${dept} WHERE ${dept.emails} && ${emails})`);
+
 export async function listUnlinkedCandidates(ex: Executor = db) {
-  return ex.select({ id: candidates.id, fields }).from(candidates).where(and(eq(candidates.reviewState, "approved"),
-    sql`cardinality(${emails}) > 0`,
-    sql`NOT EXISTS (SELECT 1 FROM ${contacts} WHERE ${contacts.emails} && ${emails})`,
-    sql`NOT EXISTS (SELECT 1 FROM ${dept} WHERE ${dept.emails} && ${emails})`)).orderBy(candidates.id).limit(5000);
+  return ex.select({ id: candidates.id, fields }).from(candidates).where(unlinked).orderBy(candidates.id).limit(5000);
+}
+
+export async function pageUnlinkedCandidates(limit: number, offset: number, q: string, ex: Executor = db) {
+  const filter = and(unlinked, q ? sql`(
+    strpos(lower(${fields}->'name'->>'value'), lower(${q})) > 0
+    OR strpos(lower(${fields}->'company'->>'value'), lower(${q})) > 0
+    OR EXISTS (SELECT 1 FROM unnest(${emails}) AS address(email) WHERE strpos(email, lower(${q})) > 0)
+  )` : undefined);
+  const [items, [summary]] = await Promise.all([
+    ex.select({ id: candidates.id, fields }).from(candidates).where(filter).orderBy(candidates.id).limit(limit).offset(offset),
+    ex.select({ total: count() }).from(candidates).where(filter),
+  ]);
+  return { items, total: summary.total };
+}
+
+export async function listUnlinkedCandidateEmails(ex: Executor = db) {
+  return ex.select({ emails: sql<string[]>`${fields}->'emails'->'value'` }).from(candidates).where(unlinked);
 }
 export async function findApprovedCandidate(id: number, ex: Executor = db) {
   return (await ex.select({ id: candidates.id, fields }).from(candidates).where(and(eq(candidates.id, id), eq(candidates.reviewState, "approved"))).limit(1))[0] ?? null;

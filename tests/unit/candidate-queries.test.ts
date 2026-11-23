@@ -36,3 +36,25 @@ it("lists only pending and approved distributable candidates, preferring reviewe
   expect(query.mock.calls[0][0].text).toContain('"fields" || coalesce((SELECT jsonb_object_agg(key, jsonb_build_object(\'value\', value))');
   expect(query.mock.calls[0][0].text).not.toContain("limit");
 });
+
+it("pages and counts the same SQL search and projects only emails for the whole queue", async () => {
+  const { drizzle } = await import("drizzle-orm/neon-serverless");
+  const query = vi.fn().mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [["31"]] }).mockResolvedValueOnce({ rows: [] });
+  const ex = drizzle({ query } as never) as unknown as Executor;
+  const { pageUnlinkedCandidates, listUnlinkedCandidateEmails } = await import("@/repositories/candidates.repository");
+  expect(await pageUnlinkedCandidates(10, 20, "MiX%_", ex)).toEqual({ items: [], total: 31 });
+  await listUnlinkedCandidateEmails(ex);
+  const [[page, pageParams], [count, countParams], [queue, queueParams]] = query.mock.calls;
+  const where = page.text.split(' from "')[1].split(" where ")[1].split(" order by ")[0];
+  expect(page.text).toMatch(/order by "candidates"\."id" limit \$5 offset \$6$/);
+  expect(pageParams).toEqual(["approved", "MiX%_", "MiX%_", "MiX%_", 10, 20]);
+  expect(where).toContain("->'name'->>'value'), lower($2)");
+  expect(where).toContain("->'company'->>'value'), lower($3)");
+  expect(where).toContain("AS address(email) WHERE strpos(email, lower($4))");
+  expect(count.text).toMatch(/^select count\(\*\) from /);
+  expect(count.text.endsWith(` where ${where}`)).toBe(true);
+  expect(countParams).toEqual(pageParams.slice(0, -2));
+  expect(queue.text.split(' from "')[0]).toMatch(/^select \("candidates"\."fields" [\s\S]*->'emails'->'value'$/);
+  expect(queue.text).not.toMatch(/strpos| order by | limit | offset /);
+  expect(queueParams).toEqual(["approved"]);
+});
