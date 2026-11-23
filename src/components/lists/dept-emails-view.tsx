@@ -16,6 +16,8 @@ import type { DeptEmailInput, DeptEmailItem, DeptEmailResponse } from "@/lib/api
 import { DASH } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+const topOf = (department: string) => department.split(" · ")[0];
+
 export function DeptEmailsView() {
   const qc = useQueryClient();
   const { data, isPending, isFetching, error, refetch } = useQuery(deptEmailsQuery);
@@ -27,9 +29,11 @@ export function DeptEmailsView() {
   const [dept, setDept] = useState("");
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return all.filter((x) => (!dept || x.department === dept) && (!s || [x.department, x.name, x.title, ...x.emails].some((v) => v?.toLowerCase().includes(s))));
+    return all.filter((x) => (!dept || topOf(x.department) === dept) && (!s || [x.department, x.name, x.title, ...x.emails].some((v) => v?.toLowerCase().includes(s))));
   }, [all, q, dept]);
-  const countOf = (d: string) => all.filter((x) => x.department === d).length;
+  // Chips use the top-level department ("LEGAL DEPARTMENT"); its teams stay as group headings in the table.
+  const tops = useMemo(() => [...new Set(departments.map(topOf))], [departments]);
+  const countOf = (d: string) => all.filter((x) => topOf(x.department) === d).length;
 
   const fields: RecordField[] = [
     { key: "department", label: "Department", required: true, full: true, hint: departments.length ? `Existing: ${departments.slice(0, 4).join(", ")}${departments.length > 4 ? "…" : ""}` : undefined },
@@ -56,9 +60,9 @@ export function DeptEmailsView() {
     <PageShell>
       <PageHeader title="Department emails" description="Internal staff and shared mailboxes. These addresses are never clients and never land in Needs company."
         actions={<Button onClick={() => setEditing("new")}><Plus />Add mailbox</Button>} />
-      {departments.length > 1 && (
+      {tops.length > 1 && (
         <div role="group" aria-label="Filter by department" className="flex flex-wrap gap-2">
-          {[{ name: "", label: "All departments", n: all.length }, ...departments.map((d) => ({ name: d, label: d, n: countOf(d) }))].map(({ name, label, n }) => {
+          {[{ name: "", label: "All departments", n: all.length }, ...tops.map((d) => ({ name: d, label: d, n: countOf(d) }))].map(({ name, label, n }) => {
             const on = dept === name;
             return (
               <button key={name || "all"} type="button" aria-pressed={on} onClick={() => setDept(name)}

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Command } from "cmdk";
 import { Check, ChevronLeft, ChevronRight, ChevronsUpDown, CircleCheck, Link2, Plus, SearchX, Sparkles } from "lucide-react";
@@ -15,7 +15,7 @@ import { TableSearch } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState, PlaceholderRows } from "@/components/shared/loadable";
 import { Pill, STAGE_LABEL } from "@/components/shared/pills";
-import { companiesQuery, keys, needsCompanyQuery } from "@/lib/api/queries";
+import { companiesQuery, countsQuery, keys, needsCompanyQuery } from "@/lib/api/queries";
 import { errorMessage, request } from "@/lib/api/http";
 import { useMutate } from "@/lib/api/use-mutate";
 import type { AttachAllResult, CompanyListItem, ContactResponse, ItemResponse, NeedsCompanyItem } from "@/lib/api-types";
@@ -23,7 +23,9 @@ import { ago, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const SIZES = [10, 25, 50, 100];
+
 const UNDO_MS = 5000;
+const BULK_LIMIT = 5000;
 
 /** Toast with a 5 second Undo that deletes the contacts the attach just created. */
 function undoToast(qc: QueryClient, message: string, contacts: { id: number; companyId: number }[]) {
@@ -41,29 +43,49 @@ function undoToast(qc: QueryClient, message: string, contacts: { id: number; com
   });
 }
 
-const matches = (it: NeedsCompanyItem, q: string) =>
-  [it.fields.name?.value, it.fields.company?.value, ...(it.fields.emails?.value ?? []), it.suggestion?.name].some((v) => v?.toLowerCase().includes(q));
-
 export function NeedsCompanyView() {
-  const { data, isPending, error, refetch } = useQuery(needsCompanyQuery);
-  const { data: companies } = useQuery(companiesQuery);
-  const items = useMemo(() => data ?? [], [data]);
-  const [q, setQ] = useState("");
-  const [page, setPage] = useState(1);
-  const [size, setSize] = useState(25);
+  // `input` is what the box shows; `view` is what the server is asked for. The search term and the page reset
+  // commit in one update, so a half-typed term never requests the old page number.
+  const [input, setInput] = useState("");
+  const [view, setView] = useState({ q: "", page: 1, size: 25 });
   const [confirm, setConfirm] = useState(false);
-  const query = q.trim().toLowerCase();
-  const filtered = useMemo(() => (query ? items.filter((it) => matches(it, query)) : items), [items, query]);
-  const pages = Math.max(1, Math.ceil(filtered.length / size));
+  const typed = input.trim();
+  useEffect(() => {
+    const t = setTimeout(() => setView((v) => (v.q === typed ? v : { ...v, q: typed, page: 1 })), 300);
+    return () => clearTimeout(t);
+  }, [typed]);
+  const { q: query, page, size } = view;
+  const setPage = (p: number) => setView((v) => ({ ...v, page: p }));
+  const clearSearch = () => { setInput(""); setView((v) => ({ ...v, q: "", page: 1 })); };
+  // One request per page: the server pages, searches and counts; keepPreviousData keeps the old rows on screen while the next page loads.
+  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = useQuery({ ...needsCompanyQuery(page, size, query), placeholderData: keepPreviousData });
+  // Rows from the previous query are still showing, or the search term has not been sent yet.
+  const settling = isPlaceholderData || typed !== query;
+  const { data: companies } = useQuery(companiesQuery);
+  const visible = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const suggested = data?.suggested ?? 0;
+  const pages = Math.max(1, Math.ceil(total / size));
   const current = Math.min(page, pages);
   const start = (current - 1) * size;
-  const visible = filtered.slice(start, start + size);
-  const suggested = useMemo(() => items.filter((it) => it.suggestion).length, [items]);
+  // An attach can empty the last page; step back to the last page that still exists.
+  if (data && !isFetching && !settling && page > pages) setPage(pages);
+  const { data: counts } = useQuery(countsQuery);
+  // Only the unfiltered page total is the whole queue. The badge is capped at the bulk limit, so it never feeds the unmatched number.
+  const wholeQueue = !query && !settling && data ? total : null;
+  const unmatched = wholeQueue === null ? null : Math.max(0, wholeQueue - suggested);
+  // The bulk action reads the first 5,000 queued contacts. Warn whenever the queue may be longer, including while its size is unknown.
+  const mayExceed = wholeQueue !== null ? wholeQueue > BULK_LIMIT : (counts?.needsCompany ?? BULK_LIMIT) >= BULK_LIMIT;
   const qc = useQueryClient();
   const attachAll = useMutate({
     fn: () => request<ItemResponse<AttachAllResult>>("/api/needs-company/attach-all", { method: "POST" }),
     invalidate: [keys.needsCompany, keys.counts, keys.companies],
-    onDone: (r) => { setConfirm(false); undoToast(qc, `Attached ${r.item.attached} contact${r.item.attached === 1 ? "" : "s"}`, r.item.contacts); },
+    onDone: (r) => {
+      setConfirm(false);
+      // Nothing was created, so there is nothing to undo.
+      if (r.item.contacts.length === 0) toast.info("No contacts were attached. Contacts beyond the bulk limit need Attach on their own row.");
+      else undoToast(qc, `Attached ${r.item.attached} contact${r.item.attached === 1 ? "" : "s"}`, r.item.contacts);
+    },
   });
   return (
     <PageShell>
@@ -72,36 +94,36 @@ export function NeedsCompanyView() {
       <section aria-label="Unlinked Gmail contacts" className="overflow-hidden rounded-2xl border border-edge bg-card">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4 pb-3">
           <h2 className="text-[15px] font-semibold text-muted-foreground">Queue</h2>
-          <span className="text-sm font-bold text-primary-text tabular-nums">{isPending ? "…" : query ? `${filtered.length} of ${items.length}` : items.length}</span>
+          <span className="text-sm font-bold text-primary-text tabular-nums">{isPending ? "…" : total}</span>
           <div className="ml-auto w-full sm:w-72">
-            <TableSearch value={q} placeholder="Search name, company or email" onChange={(v) => { setQ(v); setPage(1); }} />
+            <TableSearch value={input} placeholder="Search name, company or email" onChange={setInput} />
           </div>
         </div>
         {error ? <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
           : isPending ? <PlaceholderRows rows={4} />
-          : items.length === 0 ? <EmptyState icon={CircleCheck} title="Every approved Gmail contact belongs to a client." />
-          : filtered.length === 0 ? <EmptyState icon={SearchX} title="No contact matches that search." actionLabel="Clear search" onAction={() => setQ("")} />
-          : <ul className="flex flex-col gap-2 px-2 pb-2">{visible.map((it) => <QueueRow key={it.id} item={it} companies={companies ?? []} />)}</ul>}
-        {filtered.length > 0 && (
+          : total === 0 && !query ? <EmptyState icon={CircleCheck} title="Every approved Gmail contact belongs to a client." />
+          : total === 0 ? <EmptyState icon={SearchX} title="No contact matches that search." actionLabel="Clear search" onAction={clearSearch} />
+          : <ul aria-busy={isFetching} className={cn("flex flex-col gap-2 px-2 pb-2 transition-opacity", isFetching && "opacity-60")}>{visible.map((it) => <QueueRow key={it.id} item={it} companies={companies ?? []} />)}</ul>}
+        {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-3 pb-4 text-xs text-muted-foreground">
-            <span className="hidden sm:inline">Showing {start + 1} to {Math.min(start + size, filtered.length)} of {filtered.length} contacts</span>
+            <span className="hidden sm:inline">{settling ? "Loading…" : `Showing ${start + 1} to ${Math.min(start + size, total)} of ${total} contacts`}</span>
             <div className="flex items-center gap-2 max-sm:w-full max-sm:justify-between">
               <label className="flex items-center gap-2">Rows
-                <select value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(1); }} className="field-select h-8 bg-sunk dark:bg-field">
+                <select value={size} onChange={(e) => setView((v) => ({ ...v, size: Number(e.target.value), page: 1 }))} className="field-select h-8 bg-sunk dark:bg-field">
                   {SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </label>
               <span className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" aria-label="Previous page" disabled={current <= 1} onClick={() => setPage(current - 1)}><ChevronLeft /></Button>
+                <Button variant="ghost" size="icon" aria-label="Previous page" disabled={settling || current <= 1} onClick={() => setPage(current - 1)}><ChevronLeft /></Button>
                 <span className="min-w-14 text-center tabular-nums">{current} / {pages}</span>
-                <Button variant="ghost" size="icon" aria-label="Next page" disabled={current >= pages} onClick={() => setPage(current + 1)}><ChevronRight /></Button>
+                <Button variant="ghost" size="icon" aria-label="Next page" disabled={settling || current >= pages} onClick={() => setPage(current + 1)}><ChevronRight /></Button>
               </span>
             </div>
           </div>
         )}
       </section>
       <ConfirmDialog open={confirm} onOpenChange={setConfirm} title={`Attach ${suggested} contact${suggested === 1 ? "" : "s"}?`}
-        description={`Each one goes to the client that shares its email domain. ${items.length - suggested > 0 ? `${items.length - suggested} with no match stay in the queue. ` : ""}You can remove a contact from the client afterwards.`}
+        description={`Each one goes to the client that shares its email domain. ${unmatched !== null && unmatched > 0 ? `${unmatched} with no match stay in the queue. ` : ""}${mayExceed ? `Attach everything only reads the first ${BULK_LIMIT.toLocaleString()} queued contacts, so contacts beyond that need Attach on their own row. ` : ""}You can remove a contact from the client afterwards.`}
         confirmLabel="Attach everything" pendingLabel="Attaching…" pending={attachAll.isPending} onConfirm={() => attachAll.mutate()} />
     </PageShell>
   );

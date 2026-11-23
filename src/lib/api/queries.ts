@@ -27,7 +27,11 @@ export const companyQuery = (id: number) => queryOptions({ queryKey: keys.compan
 export const probityQuery = queryOptions({ queryKey: keys.probity, queryFn: () => request<ProbityResponse>("/api/probity").then((r) => r.items) });
 export const suppliersQuery = queryOptions({ queryKey: keys.suppliers, queryFn: () => request<SuppliersResponse>("/api/suppliers").then((r) => r.items) });
 export const deptEmailsQuery = queryOptions({ queryKey: keys.deptEmails, queryFn: () => request<DeptEmailsResponse>("/api/dept-emails").then((r) => r.items) });
-export const needsCompanyQuery = queryOptions({ queryKey: keys.needsCompany, queryFn: () => request<NeedsCompanyResponse>("/api/needs-company").then((r) => r.items) });
+// The key starts with keys.needsCompany, so invalidating that prefix refreshes whichever page is open.
+export const needsCompanyQuery = (page: number, size: number, q: string) => queryOptions({
+  queryKey: [...keys.needsCompany, { page, size, q }] as const,
+  queryFn: () => request<NeedsCompanyResponse>(`/api/needs-company?${new URLSearchParams({ page: String(page), size: String(size), q })}`),
+});
 export const masterUploadQuery = queryOptions({ queryKey: keys.masterUpload, queryFn: () => request<MasterUploadResponse>("/api/import/xlsx").then((r) => r.item.lastMasterUpload) });
 export const usersQuery = queryOptions({ queryKey: keys.users, queryFn: () => request<AccountsResponse>("/api/users").then((r) => r.items) });
 export const rolesQuery = queryOptions({ queryKey: keys.roles, queryFn: () => request<RolesResponse>("/api/roles").then((r) => r.items) });

@@ -11,6 +11,17 @@ export function day(value?: string | null): string {
   return Number.isNaN(d.getTime()) ? value : dateFmt.format(d);
 }
 
+/** A real YYYY-MM-DD calendar day, else "" (a shared URL can carry anything). */
+export function validDay(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+  const d = new Date(`${value}T00:00:00Z`);
+  // Date rolls 2026-02-30 over to March; comparing the round trip catches it.
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value ? "" : value;
+}
+// Asia/Manila is UTC+8 all year: the same calendar the day() column shows, whatever the browser's time zone.
+export const manilaDayStart = (d: string) => new Date(`${d}T00:00:00+08:00`).toISOString();
+export const manilaDayEnd = (d: string) => new Date(`${d}T23:59:59.999+08:00`).toISOString();
+
 export function stamp(value?: string | null): string {
   if (!value) return DASH;
   const d = new Date(value);

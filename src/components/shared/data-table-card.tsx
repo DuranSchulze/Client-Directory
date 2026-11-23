@@ -16,6 +16,8 @@ export type Column<T> = {
   className?: string;
   /** Hidden below the md breakpoint (phone keeps the essentials). */
   desktopOnly?: boolean;
+  /** Hidden below the 2xl breakpoint, for columns that only fit on very wide screens. */
+  wideOnly?: boolean;
 };
 export type Sort = { key: string; dir: "asc" | "desc" } | null;
 
@@ -92,7 +94,7 @@ export function DataTableCard<T>({
                       <th key={c.key} scope="col" aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : c.sortValue ? "none" : undefined}
                         className={cn("bg-head px-3 py-2.5 text-left text-xs font-bold tracking-wide whitespace-nowrap",
                           dir && "bg-[color-mix(in_srgb,var(--primary)_14%,var(--head))] text-primary-text",
-                          c.desktopOnly && "hidden md:table-cell", c.className)}>
+                          c.wideOnly ? "hidden 2xl:table-cell" : c.desktopOnly && "hidden md:table-cell", c.className)}>
                         {c.sortValue ? (
                           <button type="button" onClick={() => cycle(c.key)} className="inline-flex items-center gap-1.5 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring">
                             {c.header}<Icon aria-hidden className={cn("size-3.5", !dir && "opacity-40")} />
@@ -120,7 +122,7 @@ export function DataTableCard<T>({
                       {showRowNumbers && <td className="hidden py-3 pr-1 pl-3 text-right text-muted-foreground tabular-nums transition-colors group-hover/row:bg-lift md:table-cell">{start + i + 1}</td>}
                       {columns.map((c) => (
                         <td key={c.key} className={cn("px-3 py-3 align-middle transition-colors group-hover/row:bg-lift",
-                          c.desktopOnly && "hidden md:table-cell", c.className)}>
+                          c.wideOnly ? "hidden 2xl:table-cell" : c.desktopOnly && "hidden md:table-cell", c.className)}>
                           {c.render(row, start + i)}
                         </td>
                       ))}

@@ -17,7 +17,7 @@ import { companiesQuery, countsQuery, meQuery } from "@/lib/api/queries";
 import { errorMessage } from "@/lib/api/http";
 import type { CompanyListItem } from "@/lib/api-types";
 import { ENTITIES, STAGES } from "@/lib/enums";
-import { DASH, ago, day, daysSince } from "@/lib/format";
+import { DASH, ago, day, daysSince, manilaDayEnd, manilaDayStart, validDay } from "@/lib/format";
 import { useUrlFilters } from "@/lib/use-url-filters";
 import { cn } from "@/lib/utils";
 import { ClientSheet } from "./client-sheet";
@@ -56,7 +56,7 @@ export function ClientsView() {
   const all = useMemo(() => data ?? [], [data]);
 
   const status = get("status") as Status | "";
-  const f = { ent: get("ent"), svc: get("svc"), sup: get("sup"), stage: get("stage"), src: get("src"), from: get("from"), to: get("to"), quick: get("quick"), q: get("q") };
+  const f = { ent: get("ent"), svc: get("svc"), sup: get("sup"), stage: get("stage"), src: get("src"), from: validDay(get("from")), to: validDay(get("to")), quick: get("quick"), q: get("q") };
   const [qInput, setQInput] = useState(f.q);
   const sortParam = get("sort");
   const sort: Sort = sortParam ? { key: sortParam.split(":")[0], dir: sortParam.endsWith(":desc") ? "desc" : "asc" } : null;
@@ -77,8 +77,8 @@ export function ClientsView() {
       (!f.sup || c.supervisor?.trim() === f.sup) &&
       (!f.stage || (f.stage === "none" ? c.gmail.stage === null : c.gmail.stage === f.stage)) &&
       (!f.src || (f.src === "master" ? sourcesOf(c).length === 1 : sourcesOf(c).includes(f.src as SourceKey))) &&
-      (!f.from || c.createdAt >= new Date(`${f.from}T00:00:00`).toISOString()) &&
-      (!f.to || c.createdAt <= new Date(`${f.to}T23:59:59.999`).toISOString()) &&
+      (!f.from || c.createdAt >= manilaDayStart(f.from)) &&
+      (!f.to || c.createdAt <= manilaDayEnd(f.to)) &&
       matchesSearch(c, q));
   }, [all, status, f.ent, f.svc, f.sup, f.stage, f.src, f.from, f.to, f.q]);
   const quick = QUICK.find((x) => x.key === f.quick);
@@ -111,7 +111,7 @@ export function ClientsView() {
   const panelCount = chips.length;
 
   const columns: Column<CompanyListItem>[] = [
-    { key: "name", header: "Registered name", sortValue: (c) => c.name, className: "min-w-[14rem] max-md:max-w-[12rem]", render: (c) => {
+    { key: "name", header: "Registered name", sortValue: (c) => c.name, className: "min-w-[14rem] max-w-[17rem] max-md:max-w-[12rem]", render: (c) => {
       const main = mainContact(c);
       const extra = c.contacts.length - 1;
       return (
@@ -131,12 +131,12 @@ export function ClientsView() {
     { key: "source", header: "Source", desktopOnly: true, render: (c) => <SourceBadges company={c} /> },
     { key: "ent", header: "Intercompany", desktopOnly: true, sortValue: (c) => c.entities.join(","), render: (c) => c.entities.length ? c.entities.map((e) => <EntityTag key={e}>{e}</EntityTag>) : <span className="text-muted-foreground">{DASH}</span> },
     { key: "added", header: "Date added", desktopOnly: true, sortValue: (c) => c.createdAt, className: "whitespace-nowrap text-muted-foreground tabular-nums", render: (c) => day(c.createdAt) },
-    { key: "checked", header: "Last checked", desktopOnly: true, sortValue: (c) => c.lastCheckedBilling, className: "whitespace-nowrap", render: (c) => {
+    { key: "checked", header: "Last checked", desktopOnly: true, wideOnly: true, sortValue: (c) => c.lastCheckedBilling, className: "whitespace-nowrap", render: (c) => {
       const d = daysSince(c.lastCheckedBilling);
       const stale = d === null || d >= 90;
       return <span className={cn("tabular-nums", stale ? "font-semibold text-warning" : "text-muted-foreground")}>{d === null ? "Never" : ago(c.lastCheckedBilling)}</span>;
     } },
-    { key: "last", header: "Last contact", desktopOnly: true, sortValue: (c) => c.gmail.lastContact, className: "whitespace-nowrap text-muted-foreground tabular-nums", render: (c) => ago(c.gmail.lastContact) },
+    { key: "last", header: "Last contact", desktopOnly: true, wideOnly: true, sortValue: (c) => c.gmail.lastContact, className: "whitespace-nowrap text-muted-foreground tabular-nums", render: (c) => ago(c.gmail.lastContact) },
   ];
 
   return (
@@ -160,7 +160,7 @@ export function ClientsView() {
             <SlidersHorizontal aria-hidden className="size-4" />Filters
             {panelCount > 0 && <span className="rounded-full bg-primary px-1.5 text-xs font-bold tabular-nums text-primary-foreground">{panelCount}</span>}
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-[min(26rem,calc(100vw-2rem))] gap-4 p-4">
+          <PopoverContent align="start" className="max-h-[min(36rem,var(--available-height))] w-[min(26rem,calc(100vw-2rem))] gap-4 overflow-y-auto p-4">
             <FilterSelect label="Intercompany" value={f.ent} onChange={(v) => set({ ent: v || null, page: null })} options={any("Any intercompany", ENTITIES)} />
             <FilterSelect label="Accounting service" value={f.svc} onChange={(v) => set({ svc: v || null, page: null })} options={any("Any accounting service", services)} />
             <FilterSelect label="Supervisor" value={f.sup} onChange={(v) => set({ sup: v || null, page: null })} options={any("Any supervisor", supervisors)} />
@@ -209,7 +209,7 @@ export function ClientsView() {
         rowClassName={(c) => (c.id === openId ? "[&>td]:bg-[color-mix(in_srgb,var(--primary)_10%,var(--card))]" : undefined)}
         sort={sort} onSortChange={(s) => set({ sort: s ? `${s.key}:${s.dir}` : null, page: null })}
         page={page} onPageChange={(p) => set({ page: p === 1 ? null : p })} size={size} onSizeChange={(s) => set({ size: s === 25 ? null : s, page: null })}
-        search={<TableSearch slashFocus value={qInput} placeholder="Search name, alias, TIN, SEC number, contact, email" onChange={(v) => { setQInput(v); set({ q: v.trim() || null, page: null }); }} />}
+        search={<TableSearch slashFocus value={qInput} placeholder="Search name, alias, TIN, email" onChange={(v) => { setQInput(v); set({ q: v.trim() || null, page: null }); }} />}
         empty={filtering
           ? <EmptyState icon={SearchX} title="No clients match these filters." actionLabel="Clear filters" onAction={clearAll} />
           : <EmptyState icon={FileSpreadsheet} title="No clients yet." description={canImport ? "Import the clients workbook, or add the first client by hand." : "Add the first client by hand."}
