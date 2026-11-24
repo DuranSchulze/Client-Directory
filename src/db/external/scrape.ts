@@ -4,6 +4,7 @@ import { bigserial, boolean, integer, jsonb, pgTable, text, timestamp } from "dr
 export const ext_jobs = pgTable("jobs", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   name: text("name").notNull(),
+  params: jsonb("params").notNull(),
   status: text("status").notNull(),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),

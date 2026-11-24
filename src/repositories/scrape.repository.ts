@@ -6,7 +6,7 @@ import { ext_jobs as jobs, ext_schedule as schedule } from "@/db/external/scrape
 export async function readScrapeStatus() {
   const { rows: [status] } = await db.execute<{
     running: { startedAt: string; completed: unknown } | null;
-    lastStartedAt: string | null;
+    lastAutoStartedAt: string | null;
     lastFinishedAt: string | null;
     intervalMinutes: number | null;
   }>(sql`
@@ -18,7 +18,8 @@ export async function readScrapeStatus() {
       ORDER BY ${jobs.startedAt} DESC, ${jobs.id} DESC
       LIMIT 1
     ) AS "running",
-    (SELECT to_json(max(${jobs.startedAt})) FROM ${jobs}) AS "lastStartedAt",
+    (SELECT to_json(max(${jobs.startedAt})) FROM ${jobs}
+      WHERE ${jobs.name} = 'scrape' AND ${jobs.params}->>'auto' = 'true') AS "lastAutoStartedAt",
     (SELECT to_json(max(${jobs.finishedAt})) FROM ${jobs}) AS "lastFinishedAt",
     (SELECT CASE WHEN ${schedule.enabled} THEN ${schedule.intervalMinutes} END
       FROM ${schedule} ORDER BY ${schedule.id} LIMIT 1) AS "intervalMinutes"

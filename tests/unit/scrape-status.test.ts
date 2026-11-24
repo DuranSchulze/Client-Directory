@@ -12,23 +12,25 @@ const finished = "2026-11-24T05:06:00Z";
 const empty = { running: null, nextAt: null, lastFinishedAt: null };
 beforeEach(() => vi.resetAllMocks());
 
-it("returns progress, last finish, and the next time calculated from the latest job's start", async () => {
+it("keeps the countdown anchored to the automatic scrape when a newer manual job runs", async () => {
   m.execute.mockResolvedValue({ rows: [{
-    running: { startedAt: started, completed: 17 },
-    lastStartedAt: "2026-11-24T05:03:00Z", lastFinishedAt: finished, intervalMinutes: 30,
+    running: { startedAt: "2026-11-24T05:09:00Z", completed: 17 },
+    lastAutoStartedAt: started, lastFinishedAt: finished, intervalMinutes: 30,
   }] });
   const response = await GET();
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ item: {
-    running: { startedAt: "2026-11-24T05:00:00.000Z", completed: 17 },
-    nextAt: "2026-11-24T05:33:00.000Z", lastFinishedAt: "2026-11-24T05:06:00.000Z",
+    running: { startedAt: "2026-11-24T05:09:00.000Z", completed: 17 },
+    nextAt: "2026-11-24T05:30:00.000Z", lastFinishedAt: "2026-11-24T05:06:00.000Z",
   } });
+  const { sql } = new PgDialect().sqlToQuery(m.execute.mock.calls[0][0]);
+  expect(sql).toMatch(/\(SELECT to_json\(max\("jobs"\."started_at"\)\) FROM "jobs"\s+WHERE "jobs"\."name" = 'scrape' AND "jobs"\."params"->>'auto' = 'true'\) AS "lastAutoStartedAt"/);
   expect(m.requireRouteAccess).toHaveBeenCalledExactlyOnceWith("directory");
 });
 
 it("excludes stale heartbeats before choosing the latest running or paused job", async () => {
   m.execute.mockResolvedValue({ rows: [{
-    running: null, lastStartedAt: started, lastFinishedAt: finished, intervalMinutes: 15,
+    running: null, lastAutoStartedAt: started, lastFinishedAt: finished, intervalMinutes: 15,
   }] });
   const response = await GET();
   expect(await response.json()).toEqual({ item: {
@@ -42,7 +44,7 @@ it("excludes stale heartbeats before choosing the latest running or paused job",
 
 it("omits the next time if scheduling is disabled and defaults missing progress to zero", async () => {
   m.execute.mockResolvedValue({ rows: [{
-    running: { startedAt: started, completed: null }, lastStartedAt: started, lastFinishedAt: null, intervalMinutes: null,
+    running: { startedAt: started, completed: null }, lastAutoStartedAt: started, lastFinishedAt: null, intervalMinutes: null,
   }] });
   expect(await (await GET()).json()).toEqual({ item: {
     running: { startedAt: "2026-11-24T05:00:00.000Z", completed: 0 }, nextAt: null, lastFinishedAt: null,
@@ -51,9 +53,9 @@ it("omits the next time if scheduling is disabled and defaults missing progress 
   expect(sql).toContain('CASE WHEN "schedule"."enabled" THEN "schedule"."interval_minutes" END');
 });
 
-it("omits the next time when the schedule is enabled and there have been no jobs", async () => {
+it("omits the next time when the schedule is enabled and there have been no automatic scrapes", async () => {
   m.execute.mockResolvedValue({ rows: [{
-    running: null, lastStartedAt: null, lastFinishedAt: null, intervalMinutes: 15,
+    running: null, lastAutoStartedAt: null, lastFinishedAt: null, intervalMinutes: 15,
   }] });
   expect(await (await GET()).json()).toEqual({ item: empty });
 });

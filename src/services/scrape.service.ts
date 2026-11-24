@@ -3,15 +3,15 @@ import { readScrapeStatus } from "@/repositories/scrape.repository";
 
 export async function getScrapeStatus(): Promise<ScrapeStatus> {
   try {
-    const { running, lastStartedAt, lastFinishedAt, intervalMinutes } = await readScrapeStatus();
+    const { running, lastAutoStartedAt, lastFinishedAt, intervalMinutes } = await readScrapeStatus();
     const completed = running?.completed;
     return {
       running: running ? {
         startedAt: new Date(running.startedAt).toISOString(),
         completed: typeof completed === "number" && Number.isSafeInteger(completed) && completed >= 0 ? completed : 0,
       } : null,
-      nextAt: lastStartedAt !== null && intervalMinutes !== null
-        ? new Date(Date.parse(lastStartedAt) + intervalMinutes * 60_000).toISOString()
+      nextAt: lastAutoStartedAt !== null && intervalMinutes !== null
+        ? new Date(Date.parse(lastAutoStartedAt) + intervalMinutes * 60_000).toISOString()
         : null,
       lastFinishedAt: lastFinishedAt === null ? null : new Date(lastFinishedAt).toISOString(),
     };
