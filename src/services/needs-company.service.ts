@@ -9,7 +9,7 @@ import { deleteContact, findContact, insertContact, listContacts } from "@/repos
 import { lockEmailOwnership } from "@/repositories/ownership.repository";
 import { assertEmailsAvailable } from "./contacts.service";
 import { refreshProbityMatches } from "./probity.service";
-import { emails, id, object } from "./validation.service";
+import { emails, id, object, validatePaging } from "./validation.service";
 
 const emailDomain = (email: string) => email.toLowerCase().split("@")[1];
 
@@ -22,19 +22,8 @@ export function suggestCompany(candidate: CandidateItem, companies: { id: number
   const company = companies.find((company) => companyIds.has(company.id));
   return company ? { companyId: company.id, name: company.name } : null;
 }
-export async function getNeedsCompany({ page, size, q }: { page: string | null; size: string | null; q: string | null }): Promise<NeedsCompanyPage> {
-  const pageNumber = Number(page ?? "1");
-  const limit = Number(size ?? "25");
-  const offset = (pageNumber - 1) * limit;
-  if (page !== null && (!/^\d+$/.test(page) || pageNumber < 1 || !Number.isSafeInteger(pageNumber))) {
-    throw new AppError(400, "Page must be a positive integer", "page");
-  }
-  if ((size !== null && !/^\d+$/.test(size)) || ![10, 25, 50, 100].includes(limit)) {
-    throw new AppError(400, "Size must be 10, 25, 50 or 100", "size");
-  }
-  if (!Number.isSafeInteger(offset)) throw new AppError(400, "Page is too large", "page");
-  const search = q?.trim() ?? "";
-  if (search.includes("\0")) throw new AppError(400, "Search cannot contain a NUL character", "q");
+export async function getNeedsCompany(params: Parameters<typeof validatePaging>[0]): Promise<NeedsCompanyPage> {
+  const { limit, offset, search } = validatePaging(params);
 
   const [{ items, total }, queue, companies, contacts] = await withTransaction(async (tx) => {
     await tx.setTransaction({ isolationLevel: "repeatable read", accessMode: "read only" });

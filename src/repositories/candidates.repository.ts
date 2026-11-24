@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { db, type Executor } from "@/db";
 import { ext_candidates as candidates } from "@/db/external/candidates";
 import { contacts_tb as contacts } from "@/db/schema/contacts";
@@ -14,11 +14,29 @@ const fields = sql<CandidateFields>`(${candidates.fields} || coalesce((SELECT js
   FROM jsonb_each(${candidates.reviewed}) WHERE key IN (${sql.raw(REVIEWED_KEYS.map((k) => `'${k}'`).join(", "))})
   AND NOT (jsonb_typeof(value) = 'object' AND jsonb_exists(value, 'value'))), '{}'::jsonb))`;
 // Match the whitespace accepted by JavaScript normEmail().
-const emails = sql`ARRAY(SELECT lower(btrim(email, U&' \\0009\\000A\\000B\\000C\\000D\\00A0\\1680\\2000\\2001\\2002\\2003\\2004\\2005\\2006\\2007\\2008\\2009\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF')) FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(${fields}->'emails'->'value') = 'array' THEN ${fields}->'emails'->'value' ELSE '[]'::jsonb END) AS candidate_email(email) WHERE email IS NOT NULL)`;
-export async function listLinkedCandidates(companyId: number | undefined = undefined, ex: Executor = db) {
-  return ex.selectDistinct({ companyId: contacts.companyId, id: candidates.id, fields }).from(candidates)
-    .innerJoin(contacts, sql`${contacts.emails} && ${emails}`).where(and(inArray(candidates.reviewState, ["pending", "approved"]), companyId === undefined ? undefined : eq(contacts.companyId, companyId)))
+const normalizedEmails = (value: SQL) => sql`ARRAY(SELECT lower(btrim(email, U&' \\0009\\000A\\000B\\000C\\000D\\00A0\\1680\\2000\\2001\\2002\\2003\\2004\\2005\\2006\\2007\\2008\\2009\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF')) FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(${value}) = 'array' THEN ${value} ELSE '[]'::jsonb END) AS candidate_email(email) WHERE email IS NOT NULL)`;
+const emails = normalizedEmails(sql`${fields}->'emails'->'value'`);
+function linkedCandidates(companyId: number | undefined, ex: Executor, selectedFields = fields, addresses = emails) {
+  return ex.selectDistinct({ companyId: contacts.companyId, id: candidates.id, fields: selectedFields }).from(candidates)
+    .innerJoin(contacts, sql`${contacts.emails} && ${addresses}`).where(and(inArray(candidates.reviewState, ["pending", "approved"]), companyId === undefined ? undefined : eq(contacts.companyId, companyId)))
     .orderBy(candidates.id, contacts.companyId).limit(5000);
+}
+export async function listLinkedCandidates(companyId: number | undefined = undefined, ex: Executor = db) {
+  return linkedCandidates(companyId, ex);
+}
+export async function listLinkedCandidateRollups(ex: Executor) {
+  // Apply the same flat reviewed overrides without merging the timeline and other unused fields.
+  const effective = (key: "stage" | "last_contact" | "emails") => {
+    const edit = sql`(${candidates.reviewed}->${key}::text)`;
+    return sql`(case when ${edit} is null or (jsonb_typeof(${edit}) = 'object' and jsonb_exists(${edit}, 'value'))
+      then ${candidates.fields}->${key}::text else jsonb_build_object('value', ${edit}) end)`;
+  };
+  const rollupFields = sql<CandidateFields>`jsonb_build_object(
+    'stage', ${effective("stage")},
+    'last_contact', ${effective("last_contact")},
+    'needs_check', ${candidates.fields}->'needs_check'
+  )`;
+  return linkedCandidates(undefined, ex, rollupFields, normalizedEmails(sql`${effective("emails")}->'value'`));
 }
 const unlinked = and(eq(candidates.reviewState, "approved"),
   sql`cardinality(${emails}) > 0`,

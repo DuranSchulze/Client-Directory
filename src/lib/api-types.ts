@@ -53,6 +53,15 @@ export type Counts = { companies: number; probity: number; probityUnmatched: num
 export type ApiError = { error: string; field?: string };
 export type ItemResponse<T> = { item: T };
 export type ListResponse<T> = { items: T[] };
+type ListPage<T> = ListResponse<T> & { total: number; all: number };
+export type CompaniesPage = ListPage<CompanyListItem> & {
+  kpi: { active: number; inactive: number; isNew: number; newActive: number; unset: number };
+  chipCounts: Record<"check" | "recheck" | "tin" | "probity" | "nogmail", number>;
+  facets: { services: string[]; supervisors: string[] };
+};
+export type ProbityPage = ListPage<ProbityItem> & { matched: number };
+export type SuppliersPage = ListPage<SupplierItem>;
+export type DeptEmailsPage = ListPage<DeptEmailItem> & { departments: { department: string; count: number }[] };
 export type DeleteResponse = { ok: true };
 export type LoginBody = { email: string; password: string };
 export type SessionUser = { id: number; email: string; name: string; role: { id: number; name: string }; routes: RouteKey[] };

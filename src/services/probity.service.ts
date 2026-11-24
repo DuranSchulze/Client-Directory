@@ -1,12 +1,13 @@
 import { withTransaction, type Tx } from "@/db";
 import { AppError } from "@/lib/errors";
 import { probityDto } from "@/lib/dto";
+import type { ProbityPage } from "@/lib/api-types";
 import * as repo from "@/repositories/probity.repository";
 import { findCompany, listCompanies } from "@/repositories/companies.repository";
 import { listContacts } from "@/repositories/contacts.repository";
 import { lockEmailOwnership } from "@/repositories/ownership.repository";
 import { matchProbity } from "./probity-match";
-import { validateProbity } from "./validation.service";
+import { pagingParams, validateProbity, validateSort } from "./validation.service";
 
 export async function refreshProbityMatches(ex: Tx): Promise<void> {
   const companies = await listCompanies(ex);
@@ -21,6 +22,15 @@ export async function getProbity() {
   const [rows, companies] = await Promise.all([repo.listProbity(), listCompanies()]);
   const names = new Map(companies.map((company) => [company.id, company.name]));
   return rows.map((row) => probityDto(row, row.companyId === null ? null : names.get(row.companyId) ?? null));
+}
+export async function getProbityPage(params: URLSearchParams): Promise<ProbityPage> {
+  const page = pagingParams(params);
+  const { key, direction } = validateSort(params.get("sort"), repo.PROBITY_SORT_COLUMNS, "company");
+  return withTransaction(async (tx) => {
+    await tx.setTransaction({ isolationLevel: "repeatable read", accessMode: "read only" });
+    const { rows, ...counts } = await repo.listProbityPage(page, key, direction, tx);
+    return { ...counts, items: rows.map(({ row, companyName }) => probityDto(row, companyName)) };
+  });
 }
 export async function getProbityItem(id: number) {
   const row = await repo.findProbity(id);

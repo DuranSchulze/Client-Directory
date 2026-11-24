@@ -5,6 +5,31 @@ import { COMPANY_DATE_FIELDS, COMPANY_TEXT_FIELDS } from "@/lib/api-types";
 import type { CompanyPatch, ContactPatch, DeptEmailPatch, ProbityPatch, SupplierInput } from "@/lib/api-types";
 
 export function invalid(field: string, message = "Invalid value"): never { throw new AppError(400, message, field); }
+export function validatePaging({ page, size, q }: { page: string | null; size: string | null; q: string | null }) {
+  const pageNumber = Number(page ?? "1");
+  const limit = Number(size ?? "25");
+  if (page !== null && (!/^\d+$/.test(page) || pageNumber < 1 || !Number.isSafeInteger(pageNumber))) {
+    invalid("page", "Page must be a positive integer");
+  }
+  if ((size !== null && !/^\d+$/.test(size)) || ![10, 25, 50, 100].includes(limit)) {
+    invalid("size", "Size must be 10, 25, 50 or 100");
+  }
+  const offset = (pageNumber - 1) * limit;
+  if (!Number.isSafeInteger(offset)) invalid("page", "Page is too large");
+  const search = q?.trim() ?? "";
+  if (search.includes("\0")) invalid("q", "Search cannot contain a NUL character");
+  return { limit, offset, search };
+}
+export function pagingParams(params: URLSearchParams) {
+  return validatePaging({ page: params.get("page"), size: params.get("size"), q: params.get("q") });
+}
+export function validateSort<K extends string>(value: string | null, columns: Record<K, unknown>, defaultKey: K): { key: K; direction: "asc" | "desc" } {
+  const [key, direction, ...rest] = (value ?? `${defaultKey}:asc`).split(":");
+  if (!Object.prototype.hasOwnProperty.call(columns, key) || (direction !== "asc" && direction !== "desc") || rest.length) {
+    invalid("sort", "Use a supported sort key and asc or desc");
+  }
+  return { key: key as K, direction };
+}
 export function object(body: unknown, keys: readonly string[]): Record<string, unknown> {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new AppError(400, "Expected an object");
   for (const key of Object.keys(body)) if (!keys.includes(key)) invalid(key, "Unknown or read-only field");

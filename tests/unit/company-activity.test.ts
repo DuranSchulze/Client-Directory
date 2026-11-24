@@ -27,7 +27,7 @@ it("includes pending and approved candidates in list rollups, Gmail filter input
   const { GET: list } = await import("@/app/api/companies/route");
   const { GET: detail } = await import("@/app/api/companies/[id]/route");
   const { GET: exportCsv } = await import("@/app/api/companies/export/route");
-  const { items } = await (await list()).json() as import("@/lib/api-types").CompaniesResponse;
+  const { items } = await (await list(new Request("https://example.test/api/companies"))).json() as import("@/lib/api-types").CompaniesResponse;
   expect(items[0].gmail).toMatchObject({ stage: "paid", candidateIds: [10, 11] });
   expect(items.filter((item) => item.gmail.stage === "quoted").map((item) => item.id)).toEqual([2]);
   expect(items.filter((item) => item.gmail.candidateIds.length === 0).map((item) => item.id)).toEqual([3]);
