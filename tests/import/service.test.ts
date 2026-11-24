@@ -70,7 +70,13 @@ it.each([[" 12-345 (67) ", "12-345 (67)", "4567"], ["1-2", "1-2", "12"], [" ", n
 });
 it("locks before replanning, writes in order, encrypts bank numbers and uses the transaction throughout", async () => {
   const { importWorkbook } = await import("@/services/import.service");
+  const { invalidateCompanyRollupCache, readCompanyRollupCache } = await import("@/services/company-rollup-cache");
+  invalidateCompanyRollupCache();
+  const build = vi.fn(async () => []);
+  await readCompanyRollupCache(build);
   const response = await importWorkbook(workbook(), false, "admin@example.test", "synthetic.xlsx");
+  await readCompanyRollupCache(build);
+  expect(build).toHaveBeenCalledTimes(2);
   expect(m.trace).toEqual(["lock", "snapshot", "dept", "suppliers", "companies", "contacts", "probity", "refresh"]);
   expect(m.companies.mock.calls[0][0][0].accountNo).not.toBe("000123456");
   expect(decryptAccountNo(m.companies.mock.calls[0][0][0].accountNo)).toBe("000123456");

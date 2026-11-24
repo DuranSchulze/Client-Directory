@@ -7,11 +7,12 @@ import { listDeptEmails } from "@/repositories/dept-emails.repository";
 import { listSuppressions, lockEmailOwnership, tryDistributionLock } from "@/repositories/ownership.repository";
 import { domainCompanies } from "./needs-company.service";
 import { refreshProbityMatches } from "./probity.service";
+import { invalidateCompanyRollupCache } from "./company-rollup-cache";
 
 export async function distributeMatches() {
   const result = { added: 0, ambiguous: 0, skipped: 0 };
   if (process.env.AUTO_DISTRIBUTE !== "1") return result;
-  return withTransaction(async (tx) => {
+  await withTransaction(async (tx) => {
     if (!await tryDistributionLock(tx)) return result;
     await lockEmailOwnership(tx);
     const [candidates, contacts, dept, suppressions] = await Promise.all([
@@ -37,4 +38,6 @@ export async function distributeMatches() {
     if (result.added) await refreshProbityMatches(tx);
     return result;
   });
+  if (result.added) invalidateCompanyRollupCache();
+  return result;
 }

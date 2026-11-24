@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/neon-serverless";
 
 const { query } = vi.hoisted(() => ({ query: vi.fn() }));
-vi.mock("@/db", () => ({ db: drizzle({ query } as never) }));
+vi.mock("@/db", () => { const db = drizzle({ query } as never); return { db, withTransaction: (fn: (tx: unknown) => unknown) => fn(Object.assign(Object.create(db), { setTransaction: async () => {} })) }; });
 vi.mock("@/lib/auth/guard", () => ({ requireRouteAccess: vi.fn() }));
 vi.mock("@/repositories/companies.repository", () => {
   const companies = [
@@ -11,7 +11,7 @@ vi.mock("@/repositories/companies.repository", () => {
   return { listCompanies: async () => companies, findCompany: async (id: number) => companies.find((company) => company.id === id) };
 });
 vi.mock("@/repositories/contacts.repository", () => ({ listContacts: async () => [] }));
-vi.mock("@/repositories/probity.repository", () => ({ listProbity: async () => [] }));
+vi.mock("@/repositories/probity.repository", () => ({ listProbity: async () => [], listProbityCompanyIds: async () => [] }));
 vi.mock("@/repositories/reveals.repository", () => ({ listReveals: async () => [] }));
 
 it("includes pending and approved candidates in list rollups, Gmail filter inputs, detail and CSV export reads", async () => {
@@ -21,7 +21,7 @@ it("includes pending and approved candidates in list rollups, Gmail filter input
     { companyId: 2, id: 12, state: "pending", stage: "quoted" },
   ];
   query.mockImplementation(async (_sql, params) => ({
-    rows: rows.filter((row) => params.includes(row.state) && (params.length === 3 || params.includes(row.companyId)))
+    rows: rows.filter((row) => params.includes(row.state) && (params.filter((p: unknown) => typeof p === "number").length === 1 || params.includes(row.companyId)))
       .map(({ companyId, id, stage }) => [companyId, id, { stage: { value: stage, source: "gmail", confidence: 1 } }]),
   }));
   const { GET: list } = await import("@/app/api/companies/route");
@@ -40,9 +40,9 @@ it("includes pending and approved candidates in list rollups, Gmail filter input
   const csv = await (await exportCsv()).text();
   expect(csv).toContain('"Pending client"');
   expect(csv).toContain('"Mixed client"');
-  expect(query.mock.calls.map(([, params]) => params)).toEqual([
+  // The list builds the cached rollup (reviewed-override keys come first); the CSV export reuses that cache, so only detail queries again.
+  expect(query.mock.calls.map(([, params]) => (params as unknown[]).filter((p) => p === "pending" || p === "approved" || typeof p === "number"))).toEqual([
     ["pending", "approved", 5000],
     ["pending", "approved", 1, 5000],
-    ["pending", "approved", 5000],
   ]);
 });

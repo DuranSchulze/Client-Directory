@@ -1,20 +1,9 @@
 import "server-only";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db, type Executor } from "@/db";
 import { companies_tb as companies, type CompanyInsert } from "@/db/schema/companies";
 
 export async function listCompanies(ex: Executor = db) { return ex.select().from(companies).orderBy(companies.id); }
-export function listCompanyPageInputs(ex: Executor) {
-  return ex.select({
-    id: companies.id, name: companies.name, alias: companies.alias, tradeName: companies.tradeName, tin: companies.tin,
-    secNo: companies.secNo, entities: companies.entities, engagement: companies.engagement, isNew: companies.isNew,
-    acctgService: companies.acctgService, supervisor: companies.supervisor, createdAt: companies.createdAt,
-    lastCheckedBilling: companies.lastCheckedBilling,
-  }).from(companies).orderBy(companies.id);
-}
-export function listCompaniesByIds(ids: number[], ex: Executor) {
-  return ex.select().from(companies).where(inArray(companies.id, ids));
-}
 export async function findCompany(id: number, ex: Executor = db) {
   return (await ex.select().from(companies).where(eq(companies.id, id)).limit(1))[0] ?? null;
 }

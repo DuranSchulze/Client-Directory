@@ -7,9 +7,11 @@ import { findCompany, listCompanies } from "@/repositories/companies.repository"
 import { listContacts } from "@/repositories/contacts.repository";
 import { lockEmailOwnership } from "@/repositories/ownership.repository";
 import { matchProbity } from "./probity-match";
+import { writeCompanyRollups } from "./company-rollup-cache";
 import { pagingParams, validateProbity, validateSort } from "./validation.service";
 
 export async function refreshProbityMatches(ex: Tx): Promise<void> {
+  // The owning write transaction clears the Clients cache after commit.
   const companies = await listCompanies(ex);
   const contacts = await listContacts(undefined, ex);
   for (const row of await repo.listProbity(ex)) {
@@ -39,7 +41,7 @@ export async function getProbityItem(id: number) {
 }
 export async function saveProbity(body: unknown, id?: number) {
   const input = validateProbity(body, id !== undefined);
-  return withTransaction(async (tx) => {
+  return writeCompanyRollups(async (tx) => {
     await lockEmailOwnership(tx);
     const old = id === undefined ? null : await repo.findProbity(id, tx);
     if (id !== undefined && !old) throw new AppError(404, "Probity record not found");

@@ -9,6 +9,7 @@ import { deleteContact, findContact, insertContact, listContacts } from "@/repos
 import { lockEmailOwnership } from "@/repositories/ownership.repository";
 import { assertEmailsAvailable } from "./contacts.service";
 import { refreshProbityMatches } from "./probity.service";
+import { invalidateCompanyRollupCache, writeCompanyRollups } from "./company-rollup-cache";
 import { emails, id, object, validatePaging } from "./validation.service";
 
 const emailDomain = (email: string) => email.toLowerCase().split("@")[1];
@@ -50,7 +51,7 @@ async function attachIn(tx: Tx, candidate: CandidateItem, companyId: number, add
 }
 export async function attachCandidate(candidateId: number, body: unknown) {
   const companyId = id(object(body, ["companyId"]).companyId, "companyId");
-  return withTransaction(async (tx) => {
+  return writeCompanyRollups(async (tx) => {
     await lockEmailOwnership(tx);
     const candidate = await findApprovedCandidate(candidateId, tx);
     if (!candidate) throw new AppError(404, "Approved candidate not found");
@@ -64,7 +65,7 @@ export async function attachCandidate(candidateId: number, body: unknown) {
 }
 /** Attach every queued candidate that has a same-domain suggestion to its suggested client. Others are left in the queue. All or nothing. */
 export async function attachAll() {
-  return withTransaction(async (tx) => {
+  const result = await withTransaction(async (tx) => {
     await lockEmailOwnership(tx);
     const [candidates, companies, contacts] = await Promise.all([listUnlinkedCandidates(tx), listCompanies(tx), listContacts(undefined, tx)]);
     const taken = new Set<string>();
@@ -80,13 +81,15 @@ export async function attachAll() {
     if (created.length) await refreshProbityMatches(tx);
     return { attached: created.length, skipped: candidates.length - created.length, contacts: created };
   });
+  if (result.attached) invalidateCompanyRollupCache();
+  return result;
 }
 /** Undo an attach: delete the contacts it created, so the candidates return to the queue. Not the guarded delete, which refuses a client's last contact. */
 export async function undoAttach(body: unknown) {
   const raw = object(body, ["contacts"]).contacts;
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 5000) throw new AppError(400, "Nothing to undo", "contacts");
   const targets = raw.map((c) => { const o = object(c, ["id", "companyId"]); return { id: id(o.id, "id"), companyId: id(o.companyId, "companyId") }; });
-  return withTransaction(async (tx) => {
+  const result = await withTransaction(async (tx) => {
     await lockEmailOwnership(tx);
     let removed = 0;
     for (const t of targets) {
@@ -97,4 +100,6 @@ export async function undoAttach(body: unknown) {
     if (removed) await refreshProbityMatches(tx);
     return { removed };
   });
+  if (result.removed) invalidateCompanyRollupCache();
+  return result;
 }

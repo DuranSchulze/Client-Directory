@@ -1,4 +1,4 @@
-import { withTransaction, type Tx } from "@/db";
+import type { Tx } from "@/db";
 import { normEmail } from "@/lib/normalize";
 import { AppError } from "@/lib/errors";
 import { contactDto } from "@/lib/dto";
@@ -7,6 +7,7 @@ import { findCompany } from "@/repositories/companies.repository";
 import * as repo from "@/repositories/contacts.repository";
 import { findDeptEmail, findEmailOwner, lockEmailOwnership, suppressEmails } from "@/repositories/ownership.repository";
 import { refreshProbityMatches } from "./probity.service";
+import { writeCompanyRollups } from "./company-rollup-cache";
 import { validateContact } from "./validation.service";
 
 export async function assertEmailsAvailable(emails: string[], companyId: number | undefined, ex: Tx): Promise<void> {
@@ -28,7 +29,7 @@ export async function getContacts(companyId: number) {
 }
 export async function saveContact(companyId: number, body: unknown, contactId?: number) {
   const input = validateContact(body, contactId !== undefined);
-  return withTransaction(async (tx) => {
+  return writeCompanyRollups(async (tx) => {
     await lockEmailOwnership(tx);
     let saved;
     if (contactId === undefined) saved = await addContactInTransaction(companyId, input as ContactInput, tx);
@@ -47,7 +48,7 @@ export async function saveContact(companyId: number, body: unknown, contactId?: 
   });
 }
 export async function removeContact(companyId: number, contactId: number): Promise<void> {
-  await withTransaction(async (tx) => {
+  await writeCompanyRollups(async (tx) => {
     await lockEmailOwnership(tx);
     const contact = await repo.findContact(companyId, contactId, tx);
     if (!contact) throw new AppError(404, "Contact not found");

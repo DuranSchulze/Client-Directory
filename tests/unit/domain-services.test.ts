@@ -8,7 +8,8 @@ const m = vi.hoisted(() => ({
   listContacts: vi.fn(), findContact: vi.fn(), insertContact: vi.fn(), updateContact: vi.fn(), demoteMain: vi.fn(), deleteContact: vi.fn(),
   lockEmailOwnership: vi.fn(), findEmailOwner: vi.fn(), findDeptEmail: vi.fn(), listProbity: vi.fn(), updateProbity: vi.fn(), insertReveal: vi.fn(), listReveals: vi.fn(),
   requireSession: vi.fn(), requireRouteAccess: vi.fn(),
-  findApprovedCandidate: vi.fn(), findDeptEmailById: vi.fn(), insertDeptEmail: vi.fn(), updateDeptEmail: vi.fn(),
+  findApprovedCandidate: vi.fn(), listUnlinkedCandidates: vi.fn(), findDeptEmailById: vi.fn(), insertDeptEmail: vi.fn(), updateDeptEmail: vi.fn(),
+  findProbity: vi.fn(), insertProbity: vi.fn(),
 }));
 vi.mock("@/db", () => ({ withTransaction: async (fn: (tx: object) => unknown) => fn({ transaction: true }) }));
 vi.mock("@/repositories/companies.repository", () => m);
@@ -16,7 +17,9 @@ vi.mock("@/repositories/contacts.repository", () => m);
 vi.mock("@/repositories/ownership.repository", () => m);
 vi.mock("@/repositories/probity.repository", () => m);
 vi.mock("@/repositories/reveals.repository", () => m);
-vi.mock("@/repositories/candidates.repository", () => ({ listLinkedCandidates: vi.fn().mockResolvedValue([]), findApprovedCandidate: m.findApprovedCandidate }));
+vi.mock("@/repositories/candidates.repository", () => ({
+  listLinkedCandidates: vi.fn().mockResolvedValue([]), findApprovedCandidate: m.findApprovedCandidate, listUnlinkedCandidates: m.listUnlinkedCandidates,
+}));
 vi.mock("@/repositories/dept-emails.repository", () => m);
 vi.mock("@/lib/auth/guard", () => m);
 const contact = { id: 10, companyId: 1, name: null, designation: null, emails: ["client@example.com"], phones: [], billingRole: "main", source: null, updatedAt: new Date() };
@@ -130,4 +133,44 @@ it("checks department email ownership inside the shared lock before inserting", 
   await expect(saveDeptEmail({ department: "Accounting", emails: ["x@example.com"] })).rejects.toMatchObject({ status: 409 });
   expect(m.lockEmailOwnership.mock.invocationCallOrder[0]).toBeLessThan(m.findEmailOwner.mock.invocationCallOrder[0]);
   expect(m.insertDeptEmail).not.toHaveBeenCalled();
+});
+
+it.each([
+  "company create", "company update", "contact create", "contact update", "contact delete",
+  "candidate attach", "bulk attach", "attach undo", "probity create", "probity update",
+] as const)("rebuilds the paged Clients cache after %s commits", async (operation) => {
+  const { invalidateCompanyRollupCache, readCompanyRollupCache } = await import("@/services/company-rollup-cache");
+  const { createCompany, patchCompany } = await import("@/services/companies.service");
+  const { saveContact, removeContact } = await import("@/services/contacts.service");
+  const { attachCandidate, attachAll, undoAttach } = await import("@/services/needs-company.service");
+  const { saveProbity } = await import("@/services/probity.service");
+  invalidateCompanyRollupCache();
+  const build = vi.fn(async () => []);
+  await readCompanyRollupCache(build);
+
+  const saved = { id: 1, name: "Acme", createdAt: new Date(), updatedAt: new Date() };
+  const candidate = { id: 3, fields: { emails: { value: ["new@example.com"] } } };
+  const probity = { id: 4, companyListed: "Acme", companyId: 1, matchedBy: "manual", updatedAt: new Date() };
+  m.listCompanies.mockResolvedValue([saved]);
+  m.insertCompany.mockResolvedValue(saved); m.updateCompany.mockResolvedValue(saved);
+  m.findContact.mockResolvedValue({ ...contact, id: 11, billingRole: "cc" });
+  m.listContacts.mockResolvedValue([contact, { ...contact, id: 11, billingRole: "cc" }]);
+  m.findApprovedCandidate.mockResolvedValue(candidate); m.listUnlinkedCandidates.mockResolvedValue([candidate]);
+  m.findProbity.mockResolvedValue(probity); m.insertProbity.mockResolvedValue(probity); m.updateProbity.mockResolvedValue(probity);
+
+  const writes = {
+    "company create": () => createCompany({ name: "Acme", contacts: [{ emails: ["new@example.com"] }] }, "admin@example.test"),
+    "company update": () => patchCompany(1, { alias: "New" }),
+    "contact create": () => saveContact(1, { emails: ["new@example.com"] }),
+    "contact update": () => saveContact(1, { name: "New" }, 11),
+    "contact delete": () => removeContact(1, 11),
+    "candidate attach": () => attachCandidate(3, { companyId: 1 }),
+    "bulk attach": () => attachAll(),
+    "attach undo": () => undoAttach({ contacts: [{ id: 11, companyId: 1 }] }),
+    "probity create": () => saveProbity({ companyListed: "Acme", companyId: 1 }),
+    "probity update": () => saveProbity({ remarks: "New" }, 4),
+  };
+  await writes[operation]();
+  await readCompanyRollupCache(build);
+  expect(build).toHaveBeenCalledTimes(2);
 });

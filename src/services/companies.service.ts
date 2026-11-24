@@ -15,6 +15,7 @@ import { lockEmailOwnership } from "@/repositories/ownership.repository";
 import { addContactInTransaction } from "./contacts.service";
 import { refreshProbityMatches } from "./probity.service";
 import { gmailRollup, mergeActivity } from "./activity.service";
+import { readCompanyRollupCache, writeCompanyRollups } from "./company-rollup-cache";
 import { invalid, pagingParams, validateCompany, validateContact, validateSort } from "./validation.service";
 
 async function uniqueCompany(values: { name: string; tin: string | null; branchCode: string | null }, id: number | undefined, ex: Tx) {
@@ -50,31 +51,28 @@ function companyRollups(contacts: Awaited<ReturnType<typeof listContacts>>, link
   return (id: number) => ({ contacts: contactMap.get(id) ?? [], gmail: gmailRollup(candidateMap.get(id) ?? []), probity: probityIds.has(id) });
 }
 export async function getCompanies(): Promise<CompanyListItem[]> {
-  const [companies, contacts, linked, probity] = await Promise.all([repo.listCompanies(), listContacts(), listLinkedCandidates(), listProbity()]);
-  const rollup = companyRollups(contacts, linked, probity);
-  return companies.map((company) => ({ ...companyDto(company), ...rollup(company.id) }));
+  // Same rows as the paged list; the narrowed candidate rollup keeps the payload small enough for the HTTP driver.
+  return readCompanyRollupCache(buildCompanyRollups);
 }
 
-type CompanyPageInput = Omit<Awaited<ReturnType<typeof repo.listCompanyPageInputs>>[number], "createdAt"> &
-  ReturnType<ReturnType<typeof companyRollups>> & { createdAt: string };
 const companySort = {
-  name: (c: CompanyPageInput) => c.name,
-  eng: (c: CompanyPageInput) => c.engagement,
-  stage: (c: CompanyPageInput) => c.gmail.stage ? STAGES.indexOf(c.gmail.stage) : null,
-  ent: (c: CompanyPageInput) => c.entities.join(","),
-  added: (c: CompanyPageInput) => c.createdAt,
-  checked: (c: CompanyPageInput) => c.lastCheckedBilling,
-  last: (c: CompanyPageInput) => c.gmail.lastContact,
+  name: (c: CompanyListItem) => c.name,
+  eng: (c: CompanyListItem) => c.engagement,
+  stage: (c: CompanyListItem) => c.gmail.stage ? STAGES.indexOf(c.gmail.stage) : null,
+  ent: (c: CompanyListItem) => c.entities.join(","),
+  added: (c: CompanyListItem) => c.createdAt,
+  checked: (c: CompanyListItem) => c.lastCheckedBilling,
+  last: (c: CompanyListItem) => c.gmail.lastContact,
 };
 const quickFilters = {
-  check: (c: CompanyPageInput) => c.gmail.needsCheck.length > 0,
-  recheck: (c: CompanyPageInput) => (daysSince(c.lastCheckedBilling) ?? Infinity) >= 90,
-  tin: (c: CompanyPageInput) => !c.tin,
-  probity: (c: CompanyPageInput) => c.probity,
-  nogmail: (c: CompanyPageInput) => c.gmail.candidateIds.length === 0,
+  check: (c: CompanyListItem) => c.gmail.needsCheck.length > 0,
+  recheck: (c: CompanyListItem) => (daysSince(c.lastCheckedBilling) ?? Infinity) >= 90,
+  tin: (c: CompanyListItem) => !c.tin,
+  probity: (c: CompanyListItem) => c.probity,
+  nogmail: (c: CompanyListItem) => c.gmail.candidateIds.length === 0,
 };
 
-function filterCompanies(all: CompanyPageInput[], params: URLSearchParams, search: string) {
+function filterCompanies(all: CompanyListItem[], params: URLSearchParams, search: string) {
   const [status, ent, svc, sup, stage, source] = ["status", "ent", "svc", "sup", "stage", "src"].map((key) => params.get(key));
   const from = validDay(params.get("from") ?? "");
   const to = validDay(params.get("to") ?? "");
@@ -94,50 +92,51 @@ function filterCompanies(all: CompanyPageInput[], params: URLSearchParams, searc
   });
 }
 
+const clientCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 function comparePageValues(a: string | number | null, b: string | number | null, descending: boolean) {
   if (a === null || a === "") return b === null || b === "" ? 0 : 1;
   if (b === null || b === "") return -1;
   const result = typeof a === "number" && typeof b === "number" ? a - b
-    : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+    : clientCollator.compare(String(a), String(b));
   return descending ? -result : result;
 }
 
+function buildCompanyRollups() {
+  return withTransaction(async (tx) => {
+    await tx.setTransaction({ isolationLevel: "repeatable read", accessMode: "read only" });
+    const companies = await repo.listCompanies(tx);
+    const rollup = companyRollups(await listContacts(undefined, tx), await listLinkedCandidateRollups(tx), await listProbityCompanyIds(tx));
+    return companies.map((row) => ({ ...companyDto(row), ...rollup(row.id) }));
+  });
+}
 export async function getCompaniesPage(params: URLSearchParams): Promise<CompaniesPage> {
   const { limit, offset, search } = pagingParams(params);
   const { key, direction } = validateSort(params.get("sort"), companySort, "name");
-  return withTransaction(async (tx) => {
-    await tx.setTransaction({ isolationLevel: "repeatable read", accessMode: "read only" });
-    const companies = await repo.listCompanyPageInputs(tx);
-    const rollup = companyRollups(await listContacts(undefined, tx), await listLinkedCandidateRollups(tx), await listProbityCompanyIds(tx));
-    const all = companies.map((c) => ({ ...c, createdAt: c.createdAt.toISOString(), ...rollup(c.id) }));
-    const base = filterCompanies(all, params, search);
-    const quick = Object.entries(quickFilters);
-    const chipCounts = Object.fromEntries(quick.map(([name, test]) => [name, base.filter(test).length])) as CompaniesPage["chipCounts"];
-    const selected = quick.find(([name]) => name === params.get("quick"))?.[1];
-    const rows = selected ? base.filter(selected) : base;
-    const value = companySort[key];
-    rows.sort((a, b) => comparePageValues(value(a), value(b), direction === "desc") || a.id - b.id);
-    const page = rows.slice(offset, offset + limit);
-    const details = page.length ? await repo.listCompaniesByIds(page.map((row) => row.id), tx) : [];
-    const byId = new Map(details.map((row) => [row.id, row]));
-    return {
-      items: page.map(({ id, contacts, gmail, probity }) => ({ ...companyDto(byId.get(id)!), contacts, gmail, probity })),
-      total: rows.length,
-      all: all.length,
-      kpi: {
-        active: all.filter((c) => c.engagement === "active").length,
-        inactive: all.filter((c) => c.engagement === "inactive").length,
-        isNew: all.filter((c) => c.isNew).length,
-        newActive: all.filter((c) => c.isNew && c.engagement === "active").length,
-        unset: all.filter((c) => c.engagement === null).length,
-      },
-      chipCounts,
-      facets: {
-        services: [...new Set(all.flatMap((c) => c.acctgService?.trim() || []))].sort(),
-        supervisors: [...new Set(all.flatMap((c) => c.supervisor?.trim() || []))].sort(),
-      },
-    };
-  });
+  const all = await readCompanyRollupCache(buildCompanyRollups);
+  const base = filterCompanies(all, params, search);
+  const quick = Object.entries(quickFilters);
+  const chipCounts = Object.fromEntries(quick.map(([name, test]) => [name, base.filter(test).length])) as CompaniesPage["chipCounts"];
+  const selected = quick.find(([name]) => name === params.get("quick"))?.[1];
+  const rows = selected ? base.filter(selected) : base;
+  const value = companySort[key];
+  rows.sort((a, b) => comparePageValues(value(a), value(b), direction === "desc") || a.id - b.id);
+  return {
+    items: rows.slice(offset, offset + limit),
+    total: rows.length,
+    all: all.length,
+    kpi: {
+      active: all.filter((c) => c.engagement === "active").length,
+      inactive: all.filter((c) => c.engagement === "inactive").length,
+      isNew: all.filter((c) => c.isNew).length,
+      newActive: all.filter((c) => c.isNew && c.engagement === "active").length,
+      unset: all.filter((c) => c.engagement === null).length,
+    },
+    chipCounts,
+    facets: {
+      services: [...new Set(all.flatMap((c) => c.acctgService?.trim() || []))].sort(),
+      supervisors: [...new Set(all.flatMap((c) => c.supervisor?.trim() || []))].sort(),
+    },
+  };
 }
 export async function getCompany(id: number): Promise<CompanyDetail> {
   const company = await repo.findCompany(id);
@@ -156,7 +155,7 @@ export async function createCompany(body: unknown, createdBy: string) {
   if (!parsed.some((contact) => contact.emails.length)) invalid("contacts", "A new client needs a contact email");
   if (parsed.filter((contact) => contact.billingRole === "main").length > 1) invalid("contacts", "Only one contact can be main");
   const main = Math.max(0, parsed.findIndex((contact) => contact.billingRole === "main"));
-  return withTransaction(async (tx) => {
+  return writeCompanyRollups(async (tx) => {
     await lockEmailOwnership(tx);
     await uniqueCompany({ name: input.name!, tin: input.tin ?? null, branchCode: input.branchCode ?? null }, undefined, tx);
     const row = await repo.insertCompany({ ...values, name: input.name!, nameKey: nameKey(input.name!), createdBy }, tx);
@@ -170,7 +169,7 @@ export async function createCompany(body: unknown, createdBy: string) {
 export async function patchCompany(id: number, body: unknown) {
   const input = validateCompany(body, true);
   const values = encryptedInput(input, (body as Record<string, unknown>).accountNo);
-  return withTransaction(async (tx) => {
+  return writeCompanyRollups(async (tx) => {
     await lockEmailOwnership(tx);
     const old = await repo.findCompany(id, tx);
     if (!old) throw new AppError(404, "Client not found");

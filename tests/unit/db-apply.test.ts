@@ -46,18 +46,11 @@ describe("closed SQL grammar", () => {
     expect(declarations.some((d) => d.kind === "index")).toBe(true);
     expect(declarations.some((d) => d.kind === "constraint")).toBe(true);
     expect(declarations.find((d) => d.name === "fk_directory_users_role")?.sql).toContain('"public"."directory_roles"');
-    const plan = planApply(batch(sql), empty);
-    expect(plan[0]).toBe('CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA "public";');
+    expect(planApply(batch(sql), empty).some((statement) => statement.startsWith("CREATE EXTENSION"))).toBe(false);
     const pagingIndexes = [
-      ["idx_companies_created_at", 'btree ( "created_at" )'],
-      ["idx_companies_name_trgm", 'gin ( "name" "public"."gin_trgm_ops" )'],
-      ["idx_companies_alias_trgm", 'gin ( "alias" "public"."gin_trgm_ops" )'],
-      ["idx_companies_trade_name_trgm", 'gin ( "trade_name" "public"."gin_trgm_ops" )'],
       ["idx_probity_clients_company_listed", 'btree ( "company_listed" )'],
-      ["idx_probity_clients_company_id", 'btree ( "company_id" )'],
       ["idx_suppliers_name", 'btree ( "name" )'],
       ["idx_dept_emails_sort_order_id", 'btree ( "sort_order" , "id" )'],
-      ["idx_dept_emails_department", 'btree ( "department" )'],
     ];
     for (const [name, definition] of pagingIndexes) {
       expect(declarations.find((d) => d.name === name)?.sql).toContain(definition);

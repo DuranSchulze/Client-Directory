@@ -49,10 +49,6 @@ export const companies_tb = pgTable("companies", {
   uniqueIndex("uq_companies_name_key").on(t.nameKey),
   uniqueIndex("uq_companies_tin_branch").on(t.tin, sql`coalesce(${t.branchCode}, '')`).where(sql`${t.tin} IS NOT NULL`),
   index("idx_companies_tin").on(t.tin),
-  index("idx_companies_created_at").on(t.createdAt),
-  index("idx_companies_name_trgm").using("gin", t.name.op("gin_trgm_ops")),
-  index("idx_companies_alias_trgm").using("gin", t.alias.op("gin_trgm_ops")),
-  index("idx_companies_trade_name_trgm").using("gin", t.tradeName.op("gin_trgm_ops")),
 ]);
 
 export type CompanyRow = typeof companies_tb.$inferSelect;

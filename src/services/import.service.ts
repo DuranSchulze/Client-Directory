@@ -13,6 +13,7 @@ import { refreshProbityMatches } from "./probity.service";
 import { distributeMatches } from "./distribute.service";
 import { deleteContact, updateContact } from "@/repositories/contacts.repository";
 import { accountNumber } from "./companies.service";
+import { invalidateCompanyRollupCache } from "./company-rollup-cache";
 
 function* chunks<T>(items: T[]): Generator<T[]> {
   for (let i = 0; i < items.length; i += IMPORT_LIMITS.chunk) yield items.slice(i, i + IMPORT_LIMITS.chunk);
@@ -62,6 +63,7 @@ export async function importWorkbook(data: Buffer, check: boolean, userEmail: st
     await repo.insertMasterUpload({ fileName, uploadedBy: userEmail, summary: result.changes }, tx);
     return { result };
   });
+  if ("result" in committed) invalidateCompanyRollupCache();
   if ("result" in committed && process.env.AUTO_DISTRIBUTE === "1") {
     try {
       after(async () => {

@@ -21,7 +21,13 @@ afterEach(() => vi.unstubAllEnvs());
 it("normalizes pending/approved input, inserts one cc with only matching domains and refreshes once", async () => {
   m.candidates.mockResolvedValue([candidate(" NEW@ACME.TEST ", "new@acme.test", "free@gmail.com", "other@unknown.test", "invalid", null), candidate("second@acme.test")]);
   const { distributeMatches } = await import("@/services/distribute.service");
+  const { invalidateCompanyRollupCache, readCompanyRollupCache } = await import("@/services/company-rollup-cache");
+  invalidateCompanyRollupCache();
+  const build = vi.fn(async () => []);
+  await readCompanyRollupCache(build);
   expect(await distributeMatches()).toEqual({ added: 2, ambiguous: 0, skipped: 0 });
+  await readCompanyRollupCache(build);
+  expect(build).toHaveBeenCalledTimes(2);
   expect(m.insert).toHaveBeenNthCalledWith(1, { companyId: 1, name: "Pat", emails: ["new@acme.test"], billingRole: "cc", source: "scraper" }, tx);
   expect(m.refresh).toHaveBeenCalledTimes(1);
   expect(m.guard.mock.invocationCallOrder[0]).toBeLessThan(m.lock.mock.invocationCallOrder[0]);
