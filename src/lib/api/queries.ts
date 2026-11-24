@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import type {
   AccountsResponse, AuthResponse, CompaniesPage, CompaniesResponse, DeptEmailsPage, ProbityPage, SuppliersPage, RolesResponse, CompanyDetailResponse, CountsResponse, DeptEmailsResponse,
-  MasterUploadResponse, NeedsCompanyResponse, ProbityResponse, SuppliersResponse,
+  MasterUploadResponse, NeedsCompanyResponse, ProbityResponse, ScrapeStatus, SuppliersResponse,
 } from "@/lib/api-types";
 import { request } from "./http";
 
@@ -17,6 +17,7 @@ export const keys = {
   users: ["users"] as const,
   roles: ["roles"] as const,
   masterUpload: ["master-upload"] as const,
+  scrapeStatus: ["scrape-status"] as const,
 };
 
 // Grants can change from another session: re-read on focus and on every navigation (RouteGate), never served stale.
@@ -45,3 +46,9 @@ export const deptEmailsPageQuery = pagedQuery<DeptEmailsPage>(keys.deptEmails, "
 export const masterUploadQuery = queryOptions({ queryKey: keys.masterUpload, queryFn: () => request<MasterUploadResponse>("/api/import/xlsx").then((r) => r.item.lastMasterUpload) });
 export const usersQuery = queryOptions({ queryKey: keys.users, queryFn: () => request<AccountsResponse>("/api/users").then((r) => r.items) });
 export const rolesQuery = queryOptions({ queryKey: keys.roles, queryFn: () => request<RolesResponse>("/api/roles").then((r) => r.items) });
+// Poll faster while a scrape runs so the bar ends close to when the run does.
+export const scrapeStatusQuery = queryOptions({
+  queryKey: keys.scrapeStatus,
+  queryFn: () => request<{ item: ScrapeStatus }>("/api/scrape-status").then((r) => r.item),
+  refetchInterval: (q) => (q.state.data?.running ? 15_000 : 60_000),
+});

@@ -13,6 +13,7 @@ import { PageShell } from "@/components/shared/page-shell";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { TableSearch } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ScrapeBar } from "./scrape-bar";
 import { ErrorState, PlaceholderRows } from "@/components/shared/loadable";
 import { Pill, STAGE_LABEL } from "@/components/shared/pills";
 import { companiesQuery, countsQuery, keys, needsCompanyQuery, type PageParams } from "@/lib/api/queries";
@@ -99,6 +100,7 @@ export function NeedsCompanyView() {
             <TableSearch value={input} placeholder="Search name, company or email" onChange={setInput} />
           </div>
         </div>
+        <ScrapeBar />
         {error ? <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
           : isPending ? <PlaceholderRows rows={4} />
           : total === 0 && !query ? <EmptyState icon={CircleCheck} title="Every approved Gmail contact belongs to a client." />

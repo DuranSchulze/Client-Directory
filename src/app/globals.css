@@ -209,6 +209,17 @@ html[data-sidebar-ready] .sb-label { transition: opacity 0.15s ease 0.05s; }
   to { background-position: 140% 0; }
 }
 
+/* Indeterminate linear bar for a running scrape: one primary band crossing at constant speed. */
+.scrape-sweep {
+  background-image: linear-gradient(90deg, transparent 0%, var(--primary) 50%, transparent 100%);
+  background-size: 35% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-sweep 1.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scrape-sweep { background-image: none; background-color: var(--primary); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
