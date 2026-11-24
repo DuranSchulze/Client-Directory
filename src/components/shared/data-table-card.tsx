@@ -33,7 +33,7 @@ function compare(a: string | number | null | undefined, b: string | number | nul
 export function DataTableCard<T>({
   title, rows, total, columns, getRowId, onRowClick, rowLabel, search, actions, empty, itemLabel = "rows",
   loading, refetching, error, onRetry, sort: sortProp, onSortChange, page: pageProp, onPageChange, size: sizeProp, onSizeChange,
-  rowClassName, showRowNumbers = true, groupBy,
+  rowClassName, showRowNumbers = true, groupBy, paged,
 }: {
   title: string; rows: T[]; total?: number; columns: Column<T>[]; getRowId: (row: T) => string | number;
   onRowClick?: (row: T) => void; rowLabel?: (row: T) => string; search?: React.ReactNode; actions?: React.ReactNode;
@@ -42,6 +42,9 @@ export function DataTableCard<T>({
   rowClassName?: (row: T) => string | undefined; showRowNumbers?: boolean;
   /** Optional group heading rows (for example department), rendered before the first row of each group. */
   groupBy?: (row: T) => string;
+  /** Server paging: rows are already the requested page in server order. `total` = filtered count, `all` = unfiltered,
+   *  `settled` = the response for the current page has arrived (only then is an out-of-range page clamped). */
+  paged?: { total: number; all: number; settled: boolean };
 }) {
   const [sortLocal, setSortLocal] = useState<Sort>(null);
   const [pageLocal, setPageLocal] = useState(1);
@@ -54,19 +57,22 @@ export function DataTableCard<T>({
   const setSize = (s: number) => { if (onSizeChange) onSizeChange(s); else { setSizeLocal(s); setPageLocal(1); } };
 
   const sorted = useMemo(() => {
+    if (paged) return rows;
     const col = sort && columns.find((c) => c.key === sort.key);
     if (!col?.sortValue) return rows;
     const get = col.sortValue;
     const out = [...rows].sort((a, b) => compare(get(a), get(b)));
     return sort!.dir === "desc" ? out.reverse() : out;
-  }, [rows, sort, columns]);
+  }, [rows, sort, columns, paged]);
 
-  const pages = Math.max(1, Math.ceil(sorted.length / size));
-  const page = Math.min(Math.max(1, pageProp ?? pageLocal), pages);
-  // Clamp a stale page (rows shrank) back into range.
-  useEffect(() => { if ((pageProp ?? pageLocal) > pages) setPage(pages); });
+  const count = paged ? paged.total : sorted.length;
+  const pages = Math.max(1, Math.ceil(count / size));
+  const requested = Math.max(1, pageProp ?? pageLocal);
+  const page = paged ? requested : Math.min(requested, pages);
+  // Clamp a stale page (rows shrank) back into range; in server mode only once this page's own response says so.
+  useEffect(() => { if (requested > pages && (!paged || paged.settled)) setPage(pages); });
   const start = (page - 1) * size;
-  const visible = sorted.slice(start, start + size);
+  const visible = paged ? sorted : sorted.slice(start, start + size);
 
   const cycle = (key: string) => setSort(!sort || sort.key !== key ? { key, dir: "asc" } : sort.dir === "asc" ? { key, dir: "desc" } : null);
 
@@ -75,7 +81,8 @@ export function DataTableCard<T>({
       <div className="flex flex-wrap items-center gap-3 px-4 pt-4 pb-3">
         <h2 className="text-[15px] font-semibold text-muted-foreground">{title}</h2>
         <span className="text-sm font-bold text-primary-text tabular-nums">
-          {loading ? "…" : total !== undefined && total !== rows.length ? `${rows.length} of ${total}` : rows.length}
+          {loading ? "…" : paged ? (paged.total !== paged.all ? `${paged.total} of ${paged.all}` : paged.total)
+            : total !== undefined && total !== rows.length ? `${rows.length} of ${total}` : rows.length}
         </span>
         <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">{search}{actions}</div>
       </div>
@@ -134,7 +141,7 @@ export function DataTableCard<T>({
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-3 pb-4 text-xs text-muted-foreground">
-            <span className="hidden sm:inline">Showing {start + 1} to {Math.min(start + size, sorted.length)} of {sorted.length} {itemLabel}</span>
+            <span className="hidden sm:inline">Showing {start + 1} to {start + visible.length} of {count} {itemLabel}</span>
             <div className="flex items-center gap-2 max-sm:w-full max-sm:justify-between">
               <label className="flex items-center gap-2">Rows
                 <select value={size} onChange={(e) => setSize(Number(e.target.value))} className="field-select h-8 bg-sunk dark:bg-field">

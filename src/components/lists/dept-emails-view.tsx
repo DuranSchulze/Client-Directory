@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Contact, Plus, SearchX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,8 @@ import { DataTableCard, TableSearch, type Column } from "@/components/shared/dat
 import { EmptyState } from "@/components/shared/empty-state";
 import { RecordDialog, listOf, textOrNull, type RecordField, type RecordValues } from "@/components/shared/record-dialog";
 import { errorMessage, request } from "@/lib/api/http";
-import { deptEmailsQuery, keys } from "@/lib/api/queries";
+import { deptEmailsPageQuery, keys } from "@/lib/api/queries";
+import { usePagedList, usePagedUrlState } from "@/lib/api/use-paged-list";
 import type { DeptEmailInput, DeptEmailItem, DeptEmailResponse } from "@/lib/api-types";
 import { DASH } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -20,20 +21,20 @@ const topOf = (department: string) => department.split(" · ")[0];
 
 export function DeptEmailsView() {
   const qc = useQueryClient();
-  const { data, isPending, isFetching, error, refetch } = useQuery(deptEmailsQuery);
-  const [q, setQ] = useState("");
+  const url = usePagedUrlState();
+  const dept = url.get("dept");
+  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(deptEmailsPageQuery, dept ? { ...url.params, dept } : url.params);
   const [editing, setEditing] = useState<DeptEmailItem | "new" | null>(null);
-  // Department order as the sheet lists it, then people by sort order.
-  const all = useMemo(() => [...(data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id), [data]);
-  const departments = useMemo(() => [...new Set(all.map((d) => d.department))], [all]);
-  const [dept, setDept] = useState("");
-  const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return all.filter((x) => (!dept || topOf(x.department) === dept) && (!s || [x.department, x.name, x.title, ...x.emails].some((v) => v?.toLowerCase().includes(s))));
-  }, [all, q, dept]);
+  // Server returns the page in sheet order (sort order, then id); departments cover the whole list, not just this page.
+  const rows = data?.items ?? [];
+  const departments = useMemo(() => (data?.departments ?? []).map((d) => d.department), [data]);
   // Chips use the top-level department ("LEGAL DEPARTMENT"); its teams stay as group headings in the table.
-  const tops = useMemo(() => [...new Set(departments.map(topOf))], [departments]);
-  const countOf = (d: string) => all.filter((x) => topOf(x.department) === d).length;
+  const tops = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const d of data?.departments ?? []) out.set(topOf(d.department), (out.get(topOf(d.department)) ?? 0) + d.count);
+    return [...out];
+  }, [data]);
+  const setDept = (d: string) => url.set({ dept: d || null, page: null });
 
   const fields: RecordField[] = [
     { key: "department", label: "Department", required: true, full: true, hint: departments.length ? `Existing: ${departments.slice(0, 4).join(", ")}${departments.length > 4 ? "…" : ""}` : undefined },
@@ -45,7 +46,7 @@ export function DeptEmailsView() {
   async function save(v: RecordValues) {
     const body: DeptEmailInput = { department: v.department.trim(), name: textOrNull(v.name), title: textOrNull(v.title), emails: listOf(v.emails).map((e) => e.toLowerCase()) };
     if (editing && editing !== "new") await request<DeptEmailResponse>(`/api/dept-emails/${editing.id}`, { method: "PATCH", json: body });
-    else await request<DeptEmailResponse>("/api/dept-emails", { json: { ...body, sortOrder: (all.at(-1)?.sortOrder ?? 0) + 1 } });
+    else await request<DeptEmailResponse>("/api/dept-emails", { json: body }); // the server appends after the last mailbox
     await Promise.all([keys.deptEmails, keys.counts, keys.needsCompany].map((queryKey) => qc.invalidateQueries({ queryKey })));
     toast.success(editing === "new" ? "Mailbox added" : "Mailbox saved");
   }
@@ -62,7 +63,7 @@ export function DeptEmailsView() {
         actions={<Button onClick={() => setEditing("new")}><Plus />Add mailbox</Button>} />
       {tops.length > 1 && (
         <div role="group" aria-label="Filter by department" className="flex flex-wrap gap-2">
-          {[{ name: "", label: "All departments", n: all.length }, ...tops.map((d) => ({ name: d, label: d, n: countOf(d) }))].map(({ name, label, n }) => {
+          {[{ name: "", label: "All departments", n: data?.all ?? 0 }, ...tops.map(([d, n]) => ({ name: d, label: d, n }))].map(({ name, label, n }) => {
             const on = dept === name;
             return (
               <button key={name || "all"} type="button" aria-pressed={on} onClick={() => setDept(name)}
@@ -74,12 +75,14 @@ export function DeptEmailsView() {
           })}
         </div>
       )}
-      <DataTableCard title="Internal mailboxes" rows={rows} total={all.length} columns={columns} getRowId={(d) => d.id} itemLabel="mailboxes" showRowNumbers={false}
+      <DataTableCard title="Internal mailboxes" rows={rows} columns={columns} getRowId={(d) => d.id} itemLabel="mailboxes" showRowNumbers={false}
         groupBy={(d) => d.department}
         loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
+        paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
+        page={url.page} onPageChange={url.onPageChange} size={url.size} onSizeChange={url.onSizeChange}
         onRowClick={(d) => setEditing(d)} rowLabel={(d) => `Edit ${d.name ?? d.emails[0]}`}
-        search={<TableSearch value={q} onChange={setQ} placeholder="Search department, name, email" />}
-        empty={q || dept ? <EmptyState icon={SearchX} title="No mailboxes match these filters." actionLabel="Clear filters" onAction={() => { setQ(""); setDept(""); }} />
+        search={<TableSearch value={url.qInput} onChange={url.setQInput} placeholder="Search department, name, email" />}
+        empty={url.q || dept ? <EmptyState icon={SearchX} title="No mailboxes match these filters." actionLabel="Clear filters" onAction={() => { url.setQInput(""); url.set({ q: null, dept: null, page: null }); }} />
           : <EmptyState icon={Contact} title="No internal mailboxes yet." description="They arrive with the Excel import, or add one by hand." actionLabel="Add mailbox" onAction={() => setEditing("new")} />} />
       <RecordDialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }} fields={fields}
         title={editing === "new" ? "Add internal mailbox" : "Edit internal mailbox"} submitLabel={editing === "new" ? "Add mailbox" : "Save mailbox"}

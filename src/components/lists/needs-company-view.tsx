@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Command } from "cmdk";
 import { Check, ChevronLeft, ChevronRight, ChevronsUpDown, CircleCheck, Link2, Plus, SearchX, Sparkles } from "lucide-react";
@@ -15,10 +15,11 @@ import { TableSearch } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState, PlaceholderRows } from "@/components/shared/loadable";
 import { Pill, STAGE_LABEL } from "@/components/shared/pills";
-import { companiesQuery, countsQuery, keys, needsCompanyQuery } from "@/lib/api/queries";
+import { companiesQuery, countsQuery, keys, needsCompanyQuery, type PageParams } from "@/lib/api/queries";
+import { usePagedList } from "@/lib/api/use-paged-list";
 import { errorMessage, request } from "@/lib/api/http";
 import { useMutate } from "@/lib/api/use-mutate";
-import type { AttachAllResult, CompanyListItem, ContactResponse, ItemResponse, NeedsCompanyItem } from "@/lib/api-types";
+import type { AttachAllResult, ContactResponse, ItemResponse, NeedsCompanyItem } from "@/lib/api-types";
 import { ago, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +30,7 @@ const BULK_LIMIT = 5000;
 
 /** Toast with a 5 second Undo that deletes the contacts the attach just created. */
 function undoToast(qc: QueryClient, message: string, contacts: { id: number; companyId: number }[]) {
-  const refresh = () => Promise.all([keys.needsCompany, keys.counts, keys.companies].map((queryKey) => qc.invalidateQueries({ queryKey })));
+  const refresh = () => Promise.all([keys.needsCompany, keys.counts, keys.companies, keys.probity].map((queryKey) => qc.invalidateQueries({ queryKey })));
   toast.success(message, {
     duration: UNDO_MS,
     action: {
@@ -58,10 +59,9 @@ export function NeedsCompanyView() {
   const setPage = (p: number) => setView((v) => ({ ...v, page: p }));
   const clearSearch = () => { setInput(""); setView((v) => ({ ...v, q: "", page: 1 })); };
   // One request per page: the server pages, searches and counts; keepPreviousData keeps the old rows on screen while the next page loads.
-  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = useQuery({ ...needsCompanyQuery(page, size, query), placeholderData: keepPreviousData });
+  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(queuePageQuery, { page: String(page), size: String(size), q: query });
   // Rows from the previous query are still showing, or the search term has not been sent yet.
   const settling = isPlaceholderData || typed !== query;
-  const { data: companies } = useQuery(companiesQuery);
   const visible = data?.items ?? [];
   const total = data?.total ?? 0;
   const suggested = data?.suggested ?? 0;
@@ -79,7 +79,7 @@ export function NeedsCompanyView() {
   const qc = useQueryClient();
   const attachAll = useMutate({
     fn: () => request<ItemResponse<AttachAllResult>>("/api/needs-company/attach-all", { method: "POST" }),
-    invalidate: [keys.needsCompany, keys.counts, keys.companies],
+    invalidate: [keys.needsCompany, keys.counts, keys.companies, keys.probity],
     onDone: (r) => {
       setConfirm(false);
       // Nothing was created, so there is nothing to undo.
@@ -103,7 +103,7 @@ export function NeedsCompanyView() {
           : isPending ? <PlaceholderRows rows={4} />
           : total === 0 && !query ? <EmptyState icon={CircleCheck} title="Every approved Gmail contact belongs to a client." />
           : total === 0 ? <EmptyState icon={SearchX} title="No contact matches that search." actionLabel="Clear search" onAction={clearSearch} />
-          : <ul aria-busy={isFetching} className={cn("flex flex-col gap-2 px-2 pb-2 transition-opacity", isFetching && "opacity-60")}>{visible.map((it) => <QueueRow key={it.id} item={it} companies={companies ?? []} />)}</ul>}
+          : <ul aria-busy={isFetching} className={cn("flex flex-col gap-2 px-2 pb-2 transition-opacity", isFetching && "opacity-60")}>{visible.map((it) => <QueueRow key={it.id} item={it} />)}</ul>}
         {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-3 pb-4 text-xs text-muted-foreground">
             <span className="hidden sm:inline">{settling ? "Loading…" : `Showing ${start + 1} to ${Math.min(start + size, total)} of ${total} contacts`}</span>
@@ -129,17 +129,19 @@ export function NeedsCompanyView() {
   );
 }
 
-function QueueRow({ item, companies }: { item: NeedsCompanyItem; companies: CompanyListItem[] }) {
+const queuePageQuery = (p: PageParams) => needsCompanyQuery(Number(p.page), Number(p.size), p.q ?? "");
+
+function QueueRow({ item }: { item: NeedsCompanyItem }) {
   const router = useRouter();
   const f = item.fields;
   const name = f.name?.value ?? f.emails?.value?.[0] ?? `Candidate #${item.id}`;
   const emails = f.emails?.value ?? [];
-  const [target, setTarget] = useState<number | null>(item.suggestion?.companyId ?? null);
+  const [target, setTarget] = useState<{ id: number; name: string } | null>(item.suggestion ? { id: item.suggestion.companyId, name: item.suggestion.name } : null);
   const qc = useQueryClient();
   const attach = useMutate({
     fn: (companyId: number) => request<ContactResponse>(`/api/needs-company/${item.id}/attach`, { json: { companyId } }),
-    invalidate: [keys.needsCompany, keys.counts, keys.companies],
-    onDone: (r) => undoToast(qc, `Attached to ${companies.find((c) => c.id === r.item.companyId)?.name ?? "client"}`, [{ id: r.item.id, companyId: r.item.companyId }]),
+    invalidate: [keys.needsCompany, keys.counts, keys.companies, keys.probity],
+    onDone: (r) => undoToast(qc, `Attached to ${target?.id === r.item.companyId ? target.name : "client"}`, [{ id: r.item.id, companyId: r.item.companyId }]),
   });
   const noEmail = emails.length === 0;
   return (
@@ -153,8 +155,8 @@ function QueueRow({ item, companies }: { item: NeedsCompanyItem; companies: Comp
         {item.suggestion && <p className="mt-1 inline-flex items-center gap-1 text-xs text-primary-text"><Sparkles aria-hidden className="size-3" />Same email domain as {item.suggestion.name}</p>}
       </div>
       <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-        <ClientPicker companies={companies} value={target} onChange={setTarget} disabled={noEmail} label={`Attach ${name} to`} />
-        <Button disabled={!target || attach.isPending || noEmail} onClick={() => target && attach.mutate(target)} className="max-sm:flex-1">
+        <ClientPicker value={target} onChange={setTarget} disabled={noEmail} label={`Attach ${name} to`} />
+        <Button disabled={!target || attach.isPending || noEmail} onClick={() => target && attach.mutate(target.id)} className="max-sm:flex-1">
           <Link2 />{attach.isPending ? "Attaching…" : "Attach"}
         </Button>
         <Button variant="secondary" className="max-sm:flex-1"
@@ -166,14 +168,17 @@ function QueueRow({ item, companies }: { item: NeedsCompanyItem; companies: Comp
   );
 }
 
-/** Searchable client picker (the list has ~1,500 clients, so a plain select is unusable). */
-function ClientPicker({ companies, value, onChange, disabled, label }: {
-  companies: CompanyListItem[]; value: number | null; onChange: (id: number) => void; disabled?: boolean; label: string;
+/** Searchable client picker (the list has ~1,500 clients, so a plain select is unusable). The full list loads only when it opens. */
+function ClientPicker({ value, onChange, disabled, label }: {
+  value: { id: number; name: string } | null; onChange: (v: { id: number; name: string }) => void; disabled?: boolean; label: string;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = useMemo(() => companies.find((c) => c.id === value), [companies, value]);
+  const [wanted, setWanted] = useState(false);
+  const list = useQuery({ ...companiesQuery, enabled: wanted });
+  const companies = list.data ?? [];
+  const selected = value;
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setWanted(true); }}>
       <PopoverTrigger disabled={disabled} aria-label={label}
         className="inline-flex h-8 w-full min-w-0 items-center justify-between gap-2 rounded-lg bg-card px-3 text-sm outline-none transition-colors hover:bg-lift focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:w-64">
         <span className={cn("truncate", !selected && "text-muted-foreground")}>{selected?.name ?? "Attach to…"}</span>
@@ -184,11 +189,13 @@ function ClientPicker({ companies, value, onChange, disabled, label }: {
           filter={(v, search) => (v.toLowerCase().includes(search.toLowerCase()) ? 1 : 0)}>
           <Command.Input autoFocus placeholder="Search clients" className="h-10 w-full bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground" />
           <Command.List className="max-h-72 overflow-y-auto p-1">
-            <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">No client with that name.</Command.Empty>
+            {list.isPending ? <div role="status" aria-label="Loading clients" className="flex flex-col gap-1 p-1">{[0, 1, 2, 3, 4].map((i) => <div key={i} aria-hidden className="skeleton-sweep h-8 rounded-md" />)}</div>
+              : list.error ? <div role="alert" className="flex flex-col items-center gap-2 px-3 py-5 text-center text-sm text-destructive">{errorMessage(list.error)}<Button size="sm" variant="secondary" onClick={() => list.refetch()}>Try again</Button></div>
+              : <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">No client with that name.</Command.Empty>}
             {companies.map((c) => (
-              <Command.Item key={c.id} value={`${c.name} ${c.alias ?? ""} #${c.id}`} onSelect={() => { onChange(c.id); setOpen(false); }}
+              <Command.Item key={c.id} value={`${c.name} ${c.alias ?? ""} #${c.id}`} onSelect={() => { onChange({ id: c.id, name: c.name }); setOpen(false); }}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm data-[selected=true]:bg-accent">
-                <Check aria-hidden className={cn("size-4 shrink-0", c.id === value ? "text-primary-text" : "opacity-0")} />
+                <Check aria-hidden className={cn("size-4 shrink-0", c.id === value?.id ? "text-primary-text" : "opacity-0")} />
                 <span className="truncate">{c.name}</span>
                 {c.alias && <span className="truncate text-xs text-muted-foreground">{c.alias}</span>}
               </Command.Item>

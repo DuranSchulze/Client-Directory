@@ -5,13 +5,14 @@ export class ApiError extends Error {
   constructor(message: string, public status: number, public field?: string, public body?: unknown) { super(message); }
 }
 
-export async function request<T>(path: string, opts?: { method?: string; json?: unknown; body?: BodyInit; fallback?: string }): Promise<T> {
+export async function request<T>(path: string, opts?: { method?: string; json?: unknown; body?: BodyInit; fallback?: string; signal?: AbortSignal }): Promise<T> {
   const hasJson = opts?.json !== undefined;
   const res = await fetch(path, {
     method: opts?.method ?? (hasJson || opts?.body ? "POST" : "GET"),
     headers: hasJson ? { "Content-Type": "application/json" } : undefined,
     body: hasJson ? JSON.stringify(opts!.json) : opts?.body,
     cache: "no-store",
+    signal: opts?.signal,
   });
   if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/api/auth/login")) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;

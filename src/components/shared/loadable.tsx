@@ -16,7 +16,7 @@ export function Loadable({ loading, className, children }: { loading: boolean; c
 export function PlaceholderRows({ rows = 6 }: { rows?: number }) {
   return (
     <div role="status" aria-label="Loading" className="flex flex-col gap-1 p-2">
-      {Array.from({ length: rows }, (_, i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-sunk" />)}
+      {Array.from({ length: rows }, (_, i) => <div key={i} aria-hidden className="skeleton-sweep h-12 rounded-lg" />)}
     </div>
   );
 }

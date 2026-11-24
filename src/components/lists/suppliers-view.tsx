@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, SearchX, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,8 @@ import { DataTableCard, TableSearch, type Column } from "@/components/shared/dat
 import { EmptyState } from "@/components/shared/empty-state";
 import { RecordDialog, listOf, textOrNull, type RecordField, type RecordValues } from "@/components/shared/record-dialog";
 import { errorMessage, request } from "@/lib/api/http";
-import { keys, suppliersQuery } from "@/lib/api/queries";
+import { keys, suppliersPageQuery } from "@/lib/api/queries";
+import { usePagedList, usePagedUrlState } from "@/lib/api/use-paged-list";
 import type { SupplierInput, SupplierItem, SupplierResponse } from "@/lib/api-types";
 import { DASH } from "@/lib/format";
 
@@ -27,14 +28,10 @@ const toBody = (v: RecordValues): SupplierInput => ({ name: textOrNull(v.name), 
 
 export function SuppliersView() {
   const qc = useQueryClient();
-  const { data, isPending, isFetching, error, refetch } = useQuery(suppliersQuery);
-  const [q, setQ] = useState("");
+  const url = usePagedUrlState();
+  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(suppliersPageQuery, url.params);
   const [editing, setEditing] = useState<SupplierItem | "new" | null>(null);
-  const all = useMemo(() => data ?? [], [data]);
-  const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return s ? all.filter((x) => [x.name, x.particulars, x.contactName, ...x.emails, ...x.phones].some((v) => v?.toLowerCase().includes(s))) : all;
-  }, [all, q]);
+  const rows = data?.items ?? [];
 
   async function save(v: RecordValues) {
     const body = toBody(v);
@@ -55,11 +52,13 @@ export function SuppliersView() {
     <PageShell>
       <PageHeader title="OPS suppliers" description="Suppliers and contractors from the OPS Supplier tab. A separate list; never matched to clients."
         actions={<Button onClick={() => setEditing("new")}><Plus />Add supplier</Button>} />
-      <DataTableCard title="Suppliers" rows={rows} total={all.length} columns={columns} getRowId={(s) => s.id} itemLabel="suppliers"
+      <DataTableCard title="Suppliers" rows={rows} columns={columns} getRowId={(s) => s.id} itemLabel="suppliers"
         loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
+        paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
+        sort={url.sort} onSortChange={url.onSortChange} page={url.page} onPageChange={url.onPageChange} size={url.size} onSizeChange={url.onSizeChange}
         onRowClick={(s) => setEditing(s)} rowLabel={(s) => `Edit ${s.name ?? "supplier"}`}
-        search={<TableSearch value={q} onChange={setQ} placeholder="Search supplier, particulars, contact" />}
-        empty={q ? <EmptyState icon={SearchX} title="No suppliers match this search." actionLabel="Clear search" onAction={() => setQ("")} />
+        search={<TableSearch value={url.qInput} onChange={url.setQInput} placeholder="Search supplier, particulars, contact" />}
+        empty={url.q ? <EmptyState icon={SearchX} title="No suppliers match this search." actionLabel="Clear search" onAction={url.clearSearch} />
           : <EmptyState icon={Truck} title="No suppliers yet." description="They arrive with the Excel import, or add one by hand." actionLabel="Add supplier" onAction={() => setEditing("new")} />} />
       <RecordDialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }} fields={FIELDS}
         title={editing === "new" ? "Add supplier" : "Edit supplier"} submitLabel={editing === "new" ? "Add supplier" : "Save supplier"}

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, CircleX, Pencil, Plus, SearchX, ShieldCheck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,8 @@ import { DataTableCard, TableSearch, type Column } from "@/components/shared/dat
 import { EmptyState } from "@/components/shared/empty-state";
 import { RecordDialog, listOf, textOrNull, type RecordField, type RecordValues } from "@/components/shared/record-dialog";
 import { errorMessage, request } from "@/lib/api/http";
-import { keys, probityQuery } from "@/lib/api/queries";
+import { keys, probityPageQuery } from "@/lib/api/queries";
+import { usePagedList, usePagedUrlState } from "@/lib/api/use-paged-list";
 import type { ProbityInput, ProbityItem, ProbityItemResponse } from "@/lib/api-types";
 import { DASH, day } from "@/lib/format";
 
@@ -37,15 +38,10 @@ const toBody = (v: RecordValues): ProbityInput => ({
 export function ProbityView() {
   const router = useRouter();
   const qc = useQueryClient();
-  const { data, isPending, isFetching, error, refetch } = useQuery(probityQuery);
-  const [q, setQ] = useState("");
+  const url = usePagedUrlState();
+  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(probityPageQuery, url.params);
   const [editing, setEditing] = useState<ProbityItem | "new" | null>(null);
-  const all = useMemo(() => data ?? [], [data]);
-  const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return s ? all.filter((p) => [p.companyListed, p.companyName, p.contactPerson, p.referenceNo, p.remarks, ...p.emails].some((x) => x?.toLowerCase().includes(s))) : all;
-  }, [all, q]);
-  const matched = all.filter((p) => p.companyId !== null).length;
+  const rows = data?.items ?? [];
 
   async function save(v: RecordValues) {
     const body = toBody(v);
@@ -76,14 +72,16 @@ export function ProbityView() {
 
   return (
     <PageShell>
-      <PageHeader title="Probity" description={isPending ? "Probity Clients tab, cross-checked against All Clients." : `${matched} of ${all.length} rows matched to a client by email or name. Matched rows open the client.`}
+      <PageHeader title="Probity" description={!data ? "Probity Clients tab, cross-checked against All Clients." : `${data.matched} of ${data.all} rows matched to a client by email or name. Matched rows open the client.`}
         actions={<Button onClick={() => setEditing("new")}><Plus />Add probity row</Button>} />
-      <DataTableCard title="Probity clients" rows={rows} total={all.length} columns={columns} getRowId={(p) => p.id} itemLabel="rows"
+      <DataTableCard title="Probity clients" rows={rows} columns={columns} getRowId={(p) => p.id} itemLabel="rows"
         loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
+        paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
+        sort={url.sort} onSortChange={url.onSortChange} page={url.page} onPageChange={url.onPageChange} size={url.size} onSizeChange={url.onSizeChange}
         onRowClick={(p) => (p.companyId ? router.push(`/clients?id=${p.companyId}`) : setEditing(p))}
         rowLabel={(p) => (p.companyId ? `Open ${p.companyName}` : `Edit ${p.companyListed}`)}
-        search={<TableSearch value={q} onChange={setQ} placeholder="Search company, contact, reference" />}
-        empty={q ? <EmptyState icon={SearchX} title="No probity rows match this search." actionLabel="Clear search" onAction={() => setQ("")} />
+        search={<TableSearch value={url.qInput} onChange={url.setQInput} placeholder="Search company, contact, reference" />}
+        empty={url.q ? <EmptyState icon={SearchX} title="No probity rows match this search." actionLabel="Clear search" onAction={url.clearSearch} />
           : <EmptyState icon={ShieldCheck} title="No probity rows yet." description="They arrive with the Excel import, or add one by hand." actionLabel="Add probity row" onAction={() => setEditing("new")} />} />
       <RecordDialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }} fields={FIELDS}
         title={editing === "new" ? "Add probity row" : "Edit probity row"} submitLabel={editing === "new" ? "Add row" : "Save row"}

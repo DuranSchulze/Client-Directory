@@ -196,6 +196,19 @@ html[data-sidebar-ready] .sb-label { transition: opacity 0.15s ease 0.05s; }
   html[data-sidebar="collapsed"] .sb-icon-collapsed { display: block; }
 }
 
+/* Loading placeholder: a light band sweeps left to right at a steady speed. Reduced motion leaves the flat tone. */
+.skeleton-sweep {
+  background-color: color-mix(in srgb, var(--foreground) 7%, transparent);
+  background-image: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--foreground) 10%, transparent) 50%, transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-sweep 1.4s linear infinite;
+}
+@keyframes skeleton-sweep {
+  from { background-position: -40% 0; }
+  to { background-position: 140% 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }

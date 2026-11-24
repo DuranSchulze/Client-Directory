@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Download, FileSpreadsheet, FileX2, Plus, SearchX, ShieldCheck, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
@@ -13,85 +13,71 @@ import { KpiCard } from "@/components/shared/kpi-card";
 import { DataTableCard, TableSearch, type Column, type Sort } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { EngagementPill, EntityTag, Pill, StageSteps, STAGE_LABEL } from "@/components/shared/pills";
-import { companiesQuery, countsQuery, meQuery } from "@/lib/api/queries";
+import { companiesPageQuery, countsQuery, meQuery, type PageParams } from "@/lib/api/queries";
+import { usePagedList } from "@/lib/api/use-paged-list";
 import { errorMessage } from "@/lib/api/http";
 import type { CompanyListItem } from "@/lib/api-types";
 import { ENTITIES, STAGES } from "@/lib/enums";
-import { DASH, ago, day, daysSince, manilaDayEnd, manilaDayStart, validDay } from "@/lib/format";
+import { DASH, ago, day, daysSince, validDay } from "@/lib/format";
 import { useUrlFilters } from "@/lib/use-url-filters";
 import { cn } from "@/lib/utils";
 import { ClientSheet } from "./client-sheet";
-import { SourceBadges, sourcesOf, type SourceKey } from "./source-badge";
+import { SourceBadges } from "./source-badge";
 import { AddClientDialog } from "./add-client-dialog";
 
 type Status = "active" | "inactive" | "new" | "unset";
-// `panel` ones show under "Needs attention"; probity and nogmail stay valid in old URLs but now live in the Source and Gmail stage filters.
+// Counts come from the server (chipCounts). `panel` ones show under "Needs attention"; probity and nogmail stay valid in old URLs but now live in the Source and Gmail stage filters.
 const QUICK = [
-  { key: "check", label: "Needs check", panel: true, icon: TriangleAlert, test: (c: CompanyListItem) => c.gmail.needsCheck.length > 0 },
-  { key: "recheck", label: "Recheck after 90 days", panel: true, icon: CalendarClock, test: (c: CompanyListItem) => { const d = daysSince(c.lastCheckedBilling); return d === null || d >= 90; } },
-  { key: "tin", label: "Missing TIN", panel: true, icon: FileX2, test: (c: CompanyListItem) => !c.tin },
-  { key: "probity", label: "Probity", panel: false, icon: ShieldCheck, test: (c: CompanyListItem) => c.probity },
-  { key: "nogmail", label: "No Gmail yet", panel: false, icon: SearchX, test: (c: CompanyListItem) => c.gmail.candidateIds.length === 0 },
+  { key: "check", label: "Needs check", panel: true, icon: TriangleAlert },
+  { key: "recheck", label: "Recheck after 90 days", panel: true, icon: CalendarClock },
+  { key: "tin", label: "Missing TIN", panel: true, icon: FileX2 },
+  { key: "probity", label: "Probity", panel: false, icon: ShieldCheck },
+  { key: "nogmail", label: "No Gmail yet", panel: false, icon: SearchX },
 ] as const;
 
-const statusOf = (s: Status, c: CompanyListItem) =>
-  s === "new" ? c.isNew : s === "unset" ? c.engagement === null : c.engagement === s;
-
 const mainContact = (c: CompanyListItem) => c.contacts.find((x) => x.billingRole === "main") ?? c.contacts[0];
-
-function matchesSearch(c: CompanyListItem, q: string) {
-  if (!q) return true;
-  const hay = [c.name, c.alias, c.tradeName, c.tin, c.secNo, ...c.contacts.flatMap((x) => [x.name, ...x.emails, ...x.phones])];
-  return hay.some((v) => v?.toLowerCase().includes(q));
-}
+const FILTER_KEYS = ["status", "ent", "svc", "sup", "stage", "src", "from", "to", "quick", "q", "sort"] as const;
+const NO_KPI = { active: 0, inactive: 0, isNew: 0, newActive: 0, unset: 0 };
 
 export function ClientsView() {
   const { get, set } = useUrlFilters();
-  const { data, isPending, isFetching, error, refetch } = useQuery(companiesQuery);
   const [adding, setAdding] = useState(false);
   const router = useRouter();
   const { data: me } = useQuery(meQuery);
   const { data: counts } = useQuery(countsQuery);
   const canImport = !!me?.routes.includes("import");
-  const all = useMemo(() => data ?? [], [data]);
 
   const status = get("status") as Status | "";
   const f = { ent: get("ent"), svc: get("svc"), sup: get("sup"), stage: get("stage"), src: get("src"), from: validDay(get("from")), to: validDay(get("to")), quick: get("quick"), q: get("q") };
   const [qInput, setQInput] = useState(f.q);
+  // The search commits after a pause and resets the page in the same URL update.
+  useEffect(() => {
+    const typed = qInput.trim();
+    if (typed === f.q) return;
+    const t = setTimeout(() => set({ q: typed || null, page: null }), 300);
+    return () => clearTimeout(t);
+  }, [qInput, f.q, set]);
   const sortParam = get("sort");
   const sort: Sort = sortParam ? { key: sortParam.split(":")[0], dir: sortParam.endsWith(":desc") ? "desc" : "asc" } : null;
-  const page = Number(get("page")) || 1;
-  const size = Number(get("size")) || 25;
+  const page = Math.max(1, Math.floor(Number(get("page"))) || 1);
+  const size = [10, 25, 50, 100].includes(Number(get("size"))) ? Number(get("size")) : 25;
   const openId = Number(get("id")) || null;
 
-  const services = useMemo(() => [...new Set(all.map((c) => c.acctgService?.trim()).filter(Boolean) as string[])].sort(), [all]);
-  const supervisors = useMemo(() => [...new Set(all.map((c) => c.supervisor?.trim()).filter(Boolean) as string[])].sort(), [all]);
-
-  // Everything except the quick chips; chip counts are taken from this set so they combine with the other filters.
-  const base = useMemo(() => {
-    const q = f.q.trim().toLowerCase();
-    return all.filter((c) =>
-      (!status || statusOf(status, c)) &&
-      (!f.ent || c.entities.includes(f.ent as never)) &&
-      (!f.svc || c.acctgService?.trim() === f.svc) &&
-      (!f.sup || c.supervisor?.trim() === f.sup) &&
-      (!f.stage || (f.stage === "none" ? c.gmail.stage === null : c.gmail.stage === f.stage)) &&
-      (!f.src || (f.src === "master" ? sourcesOf(c).length === 1 : sourcesOf(c).includes(f.src as SourceKey))) &&
-      (!f.from || c.createdAt >= manilaDayStart(f.from)) &&
-      (!f.to || c.createdAt <= manilaDayEnd(f.to)) &&
-      matchesSearch(c, q));
-  }, [all, status, f.ent, f.svc, f.sup, f.stage, f.src, f.from, f.to, f.q]);
+  const params = useMemo(() => {
+    const out: PageParams = { page: String(page), size: String(size) };
+    for (const key of FILTER_KEYS) { const v = key === "from" ? f.from : key === "to" ? f.to : get(key); if (v) out[key] = v; }
+    return out;
+    // f.from/f.to are derived from get; get changes whenever the URL does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [get, page, size]);
+  // Every Clients page request re-reads the cached rollup on the server, so only page 2 is prefetched.
+  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(companiesPageQuery, params, 1);
+  const rows = data?.items ?? [];
+  const services = data?.facets.services ?? [];
+  const supervisors = data?.facets.supervisors ?? [];
   const quick = QUICK.find((x) => x.key === f.quick);
-  const rows = useMemo(() => (quick ? base.filter(quick.test) : base), [base, quick]);
-
-  const n = all.length || 1;
-  const kpi = {
-    active: all.filter((c) => c.engagement === "active").length,
-    inactive: all.filter((c) => c.engagement === "inactive").length,
-    isNew: all.filter((c) => c.isNew).length,
-    newActive: all.filter((c) => c.isNew && c.engagement === "active").length,
-    unset: all.filter((c) => c.engagement === null).length,
-  };
+  const n = data?.all || 1;
+  const kpi = data?.kpi ?? NO_KPI;
   const pct = (v: number) => `${Math.round((v / n) * 100)}% of clients`;
   const toggleStatus = (s: Status) => set({ status: status === s ? null : s, page: null });
   const filtering = !!(status || f.ent || f.svc || f.sup || f.stage || f.src || f.from || f.to || f.quick || f.q);
@@ -178,8 +164,8 @@ export function ClientsView() {
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-1 text-xs font-bold text-muted-foreground">Needs attention</legend>
               <div className="flex flex-wrap gap-2">
-                {QUICK.filter((x) => x.panel).map(({ key, label, icon: Icon, test }) => {
-                  const count = base.filter(test).length;
+                {QUICK.filter((x) => x.panel).map(({ key, label, icon: Icon }) => {
+                  const count = data?.chipCounts[key] ?? 0;
                   const on = f.quick === key;
                   return (
                     <Button key={key} size="sm" variant="outline" aria-pressed={on} disabled={!count && !on} onClick={() => set({ quick: on ? null : key, page: null })}
@@ -203,13 +189,14 @@ export function ClientsView() {
         {filtering && <Button variant="ghost" size="sm" className="h-8" onClick={clearAll}><X />Clear all</Button>}
       </div>
 
-      <DataTableCard title="Clients" rows={rows} total={all.length} columns={columns} getRowId={(c) => c.id} itemLabel="clients"
+      <DataTableCard title="Clients" rows={rows} columns={columns} getRowId={(c) => c.id} itemLabel="clients"
         loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
+        paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
         onRowClick={(c) => set({ id: c.id })} rowLabel={(c) => `Open ${c.name}`}
         rowClassName={(c) => (c.id === openId ? "[&>td]:bg-[color-mix(in_srgb,var(--primary)_10%,var(--card))]" : undefined)}
         sort={sort} onSortChange={(s) => set({ sort: s ? `${s.key}:${s.dir}` : null, page: null })}
         page={page} onPageChange={(p) => set({ page: p === 1 ? null : p })} size={size} onSizeChange={(s) => set({ size: s === 25 ? null : s, page: null })}
-        search={<TableSearch slashFocus value={qInput} placeholder="Search name, alias, TIN, email" onChange={(v) => { setQInput(v); set({ q: v.trim() || null, page: null }); }} />}
+        search={<TableSearch slashFocus value={qInput} placeholder="Search name, alias, TIN, email" onChange={setQInput} />}
         empty={filtering
           ? <EmptyState icon={SearchX} title="No clients match these filters." actionLabel="Clear filters" onAction={clearAll} />
           : <EmptyState icon={FileSpreadsheet} title="No clients yet." description={canImport ? "Import the clients workbook, or add the first client by hand." : "Add the first client by hand."}

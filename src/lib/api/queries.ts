@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import type {
-  AccountsResponse, AuthResponse, CompaniesResponse, RolesResponse, CompanyDetailResponse, CountsResponse, DeptEmailsResponse,
+  AccountsResponse, AuthResponse, CompaniesPage, CompaniesResponse, DeptEmailsPage, ProbityPage, SuppliersPage, RolesResponse, CompanyDetailResponse, CountsResponse, DeptEmailsResponse,
   MasterUploadResponse, NeedsCompanyResponse, ProbityResponse, SuppliersResponse,
 } from "@/lib/api-types";
 import { request } from "./http";
@@ -32,6 +32,16 @@ export const needsCompanyQuery = (page: number, size: number, q: string) => quer
   queryKey: [...keys.needsCompany, { page, size, q }] as const,
   queryFn: () => request<NeedsCompanyResponse>(`/api/needs-company?${new URLSearchParams({ page: String(page), size: String(size), q })}`),
 });
+// One page of a list. Keys sit under the module's key, so invalidating keys.probity (etc.) refreshes full-list and paged data alike.
+export type PageParams = Record<string, string>;
+const pagedQuery = <T,>(root: readonly string[], path: string) => (params: PageParams) => queryOptions({
+  queryKey: [...root, "page", params] as const,
+  queryFn: ({ signal }) => request<T>(`${path}?${new URLSearchParams(params)}`, { signal }),
+});
+export const companiesPageQuery = pagedQuery<CompaniesPage>(keys.companies, "/api/companies");
+export const probityPageQuery = pagedQuery<ProbityPage>(keys.probity, "/api/probity");
+export const suppliersPageQuery = pagedQuery<SuppliersPage>(keys.suppliers, "/api/suppliers");
+export const deptEmailsPageQuery = pagedQuery<DeptEmailsPage>(keys.deptEmails, "/api/dept-emails");
 export const masterUploadQuery = queryOptions({ queryKey: keys.masterUpload, queryFn: () => request<MasterUploadResponse>("/api/import/xlsx").then((r) => r.item.lastMasterUpload) });
 export const usersQuery = queryOptions({ queryKey: keys.users, queryFn: () => request<AccountsResponse>("/api/users").then((r) => r.items) });
 export const rolesQuery = queryOptions({ queryKey: keys.roles, queryFn: () => request<RolesResponse>("/api/roles").then((r) => r.items) });
