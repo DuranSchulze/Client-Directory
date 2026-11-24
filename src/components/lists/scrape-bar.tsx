@@ -20,19 +20,24 @@ export function ScrapeBar() {
   const { data } = useQuery(scrapeStatusQuery);
   const qc = useQueryClient();
   const [now, setNow] = useState(() => Date.now());
-  const wasRunning = useRef(false);
+  const seen = useRef<{ running: boolean; finished: string | null } | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // A finished run may have added contacts: refresh the queue and the badge once.
+  // A finished run may have added contacts: refresh the queue and the badge once, also when a whole run fell between two polls.
   const running = data?.running ?? null;
+  const finished = data?.lastFinishedAt ?? null;
   useEffect(() => {
-    if (wasRunning.current && !running) [keys.needsCompany, keys.counts].forEach((queryKey) => qc.invalidateQueries({ queryKey }));
-    wasRunning.current = !!running;
-  }, [running, qc]);
+    if (!data) return;
+    const prev = seen.current;
+    seen.current = { running: !!running, finished };
+    if (prev && ((prev.running && !running) || (finished !== null && finished !== prev.finished))) {
+      [keys.needsCompany, keys.counts].forEach((queryKey) => qc.invalidateQueries({ queryKey }));
+    }
+  }, [data, running, finished, qc]);
 
   if (!data) return null;
   const nextIn = data.nextAt ? Date.parse(data.nextAt) - now : null;
