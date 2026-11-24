@@ -46,6 +46,7 @@ export type CompanyDetail = {
 };
 export type NeedsCompanyItem = CandidateItem & { suggestion: { companyId: number; name: string } | null };
 export type NeedsCompanyPage = { items: NeedsCompanyItem[]; total: number; suggested: number };
+export type ScrapeStatus = { running: { startedAt: string; completed: number } | null; nextAt: string | null; lastFinishedAt: string | null };
 export type AttachAllResult = { attached: number; skipped: number; contacts: { id: number; companyId: number }[] };
 export type LastMasterUpload = { at: string; by: string; fileName: string };
 export type MasterUploadResponse = ItemResponse<{ lastMasterUpload: LastMasterUpload | null }>;
