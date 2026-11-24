@@ -9,14 +9,16 @@ import { DIRECTORY_TABLES } from "../src/db/directory-tables";
 
 type Token = { raw: string; kind: "word" | "identifier" | "string" | "number" | "symbol" };
 export type Column = { name: string; type: string; nullable: boolean };
-type Declaration = { kind: "table" | "index" | "constraint" | "column"; name: string; table: string; sql: string; columns: Column[] };
+type Declaration = { kind: "table" | "index" | "constraint" | "column" | "extension"; name: string; table: string; sql: string; columns: Column[]; usesTrigrams?: boolean };
 export type LiveCatalog = {
   tables: { name: string; columns: Column[] }[];
   indexes: { name: string; table: string }[];
   constraints: { name: string; table: string }[];
+  trigramSchema?: string;
 };
 class SchemaError extends Error {}
-function refuse(): never { throw new SchemaError("Refused SQL: only supported directory CREATE TABLE, CREATE INDEX and ADD CONSTRAINT statements in public are allowed."); }
+function refuse(): never { throw new SchemaError("Refused SQL: only supported directory bootstrap statements and CREATE EXTENSION IF NOT EXISTS pg_trgm are allowed."); }
+const createTrigram = 'CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA "public";';
 
 // A closed grammar prevents expressions from calling arbitrary functions or reading other objects.
 function tokenize(sql: string): Token[] {
@@ -76,7 +78,8 @@ export function parseStatements(sql: string): string[] {
 
 class StatementParser {
   private pos = 0;
-  constructor(private tokens: Token[]) {}
+  private usesTrigrams = false;
+  constructor(private tokens: Token[], private trigramSchema: string) {}
   private take(value: string): boolean {
     const token = this.tokens[this.pos];
     if (!token || token.kind === "string" || token.kind === "identifier" || token.raw.toLowerCase() !== value.toLowerCase()) return false;
@@ -145,25 +148,46 @@ class StatementParser {
     const name = this.identifier();
     if (this.take(".")) { if (name !== table) refuse(); this.identifier(); }
   }
-  private indexTerm(table: string) {
+  private indexTerm(table: string, gin: boolean) {
     if (this.take("coalesce")) {
       this.expect("("); this.columnRef(table); this.expect(","); this.literal(); this.expect(")");
-    } else this.columnRef(table);
+    } else {
+      this.columnRef(table);
+      if (gin && this.take("gin_trgm_ops")) {
+        this.usesTrigrams = true;
+        this.tokens[this.pos - 1].raw = `"${this.trigramSchema.replace(/"/g, '""')}"."gin_trgm_ops"`;
+      }
+    }
   }
   parse(): Declaration {
     let kind: Declaration["kind"], name: string, table: string;
     const columns: Column[] = [];
     if (this.take("create")) {
-      if (this.take("table")) {
+      if (this.take("extension")) {
+        this.expect("if"); this.expect("not"); this.expect("exists"); this.expect("pg_trgm");
+        if (this.pos !== this.tokens.length) refuse();
+        return { kind: "extension", name: "pg_trgm", table: "", columns, sql: createTrigram };
+      } else if (this.take("table")) {
         kind = "table"; table = name = this.table(); this.expect("(");
         do { columns.push(this.column()); } while (this.take(","));
         this.expect(")");
         if (new Set(columns.map((c) => c.name)).size !== columns.length) refuse();
       } else {
-        this.take("unique"); this.expect("index"); kind = "index"; name = this.identifier();
+        const unique = this.take("unique");
+        this.expect("index"); kind = "index";
+        if (!unique && this.take("if")) {
+          this.expect("not"); this.expect("exists");
+          // Catalog checks idempotence by owner, so a name collision on another table still fails.
+          this.tokens.splice(this.pos - 3, 3); this.pos -= 3;
+        }
+        name = this.identifier();
         this.expect("on"); table = this.table();
-        if (this.take("using") && !(this.take("btree") || this.take("gin"))) refuse();
-        this.expect("("); this.indexTerm(table); while (this.take(",")) this.indexTerm(table); this.expect(")");
+        let gin = false;
+        if (this.take("using")) {
+          gin = this.take("gin");
+          if (!gin) this.expect("btree");
+        }
+        this.expect("("); this.indexTerm(table, gin); while (this.take(",")) this.indexTerm(table, gin); this.expect(")");
         if (this.take("where")) {
           this.columnRef(table);
           if (this.take("is")) { this.take("not"); this.expect("null"); }
@@ -196,16 +220,18 @@ class StatementParser {
       else refuse();
     }
     if (this.pos !== this.tokens.length) refuse();
-    return { kind, name, table, columns, sql: this.tokens.map((t) => t.raw).join(" ") + ";" };
+    return { kind, name, table, columns, sql: this.tokens.map((t) => t.raw).join(" ") + ";", usesTrigrams: this.usesTrigrams };
   }
 }
-export function validateBatch(statements: readonly string[]): Declaration[] {
+export function validateBatch(statements: readonly string[], trigramSchema = "public"): Declaration[] {
   if (!statements.length) throw new SchemaError("Schema export is empty.");
-  return statements.map((sql) => new StatementParser(tokenize(sql)).parse());
+  return statements.map((sql) => new StatementParser(tokenize(sql), trigramSchema).parse());
 }
 export function planApply(statements: readonly string[], live: LiveCatalog): string[] {
-  const declarations = validateBatch(statements);
-  return [...new Set(declarations.filter((item) => {
+  const declarations = validateBatch(statements, live.trigramSchema);
+  const createExtension = !live.trigramSchema && declarations.some((item) => item.kind === "extension" || item.usesTrigrams);
+  const missing = declarations.filter((item) => {
+    if (item.kind === "extension") return false;
     if (item.kind === "column") {
       const column = live.tables.find((t) => t.name === item.table)?.columns.find((c) => c.name === item.name);
       if (column && (column.type !== "text" || !column.nullable)) throw new SchemaError("Column drift on public.contacts; write a reviewed manual migration. No schema changes were applied.");
@@ -226,7 +252,8 @@ export function planApply(statements: readonly string[], live: LiveCatalog): str
       return false;
     }
     return !(item.kind === "index" ? live.indexes : live.constraints).some((obj) => obj.name === item.name && obj.table === item.table);
-  }).map((item) => item.sql))];
+  }).map((item) => item.sql);
+  return [...new Set(createExtension ? [createTrigram, ...missing] : missing)];
 }
 
 async function readCatalog(client: PoolClient): Promise<LiveCatalog> {
@@ -247,7 +274,14 @@ async function readCatalog(client: PoolClient): Promise<LiveCatalog> {
     JOIN pg_catalog.pg_class t ON t.oid = c.conrelid JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace
     WHERE n.nspname = 'public'
   `);
-  return { tables: [...tables].map(([name, columns]) => ({ name, columns })), indexes: indexes.rows, constraints: constraints.rows };
+  const extension = await client.query<{ schema: string }>(`
+    SELECT n.nspname AS schema FROM pg_catalog.pg_extension e
+    JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'pg_trgm'
+  `);
+  return {
+    tables: [...tables].map(([name, columns]) => ({ name, columns })), indexes: indexes.rows, constraints: constraints.rows,
+    trigramSchema: extension.rows[0]?.schema,
+  };
 }
 export async function run(args = process.argv.slice(2)): Promise<number> {
   try {

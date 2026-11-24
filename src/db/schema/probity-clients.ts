@@ -1,4 +1,4 @@
-﻿import { bigint, bigserial, date, foreignKey, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+﻿import { bigint, bigserial, date, foreignKey, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import type { MatchedBy } from "../../lib/enums";
 import { companies_tb } from "./companies";
 
@@ -15,6 +15,10 @@ export const probity_clients_tb = pgTable("probity_clients", {
   referenceNo: text("reference_no"),
   remarks: text("remarks"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [foreignKey({ name: "fk_probity_company", columns: [t.companyId], foreignColumns: [companies_tb.id] }).onDelete("set null")]);
+}, (t) => [
+  foreignKey({ name: "fk_probity_company", columns: [t.companyId], foreignColumns: [companies_tb.id] }).onDelete("set null"),
+  index("idx_probity_clients_company_listed").on(t.companyListed),
+  index("idx_probity_clients_company_id").on(t.companyId),
+]);
 
 export type ProbityRow = typeof probity_clients_tb.$inferSelect;

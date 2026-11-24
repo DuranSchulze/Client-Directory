@@ -18,6 +18,8 @@ import { parseStatements, validateBatch, planApply, run, type LiveCatalog } from
 const table = `CREATE TABLE "companies" ("id" bigserial PRIMARY KEY NOT NULL, "name" text NOT NULL, "entities" text[] DEFAULT '{}' NOT NULL, "created_at" timestamp with time zone DEFAULT now() NOT NULL);`;
 const index = `CREATE UNIQUE INDEX "uq_companies_name" ON "companies" USING btree ("name");`;
 const constraint = `ALTER TABLE "contacts" ADD CONSTRAINT "fk_contacts_company" FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE cascade ON UPDATE no action;`;
+const extension = "CREATE EXTENSION IF NOT EXISTS pg_trgm;";
+const trgmIndex = "CREATE INDEX IF NOT EXISTS idx_name_trgm ON companies USING gin (name gin_trgm_ops);";
 const empty: LiveCatalog = { tables: [], indexes: [], constraints: [] };
 const batch = (sql: string) => parseStatements(sql);
 const columns = validateBatch(batch(table))[0].columns;
@@ -35,7 +37,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("closed SQL grammar", () => {
-  it("accepts the installed Drizzle export of the actual eight-table schema without database access", async () => {
+  it("accepts the installed Drizzle export of the actual directory schema and paging indexes", async () => {
     const { execFileSync } = await vi.importActual<typeof import("node:child_process")>("node:child_process");
     const require = createRequire(import.meta.url);
     const sql = execFileSync(process.execPath, [resolve(dirname(require.resolve("drizzle-kit")), "bin.cjs"), "export"], { encoding: "utf8" });
@@ -44,6 +46,22 @@ describe("closed SQL grammar", () => {
     expect(declarations.some((d) => d.kind === "index")).toBe(true);
     expect(declarations.some((d) => d.kind === "constraint")).toBe(true);
     expect(declarations.find((d) => d.name === "fk_directory_users_role")?.sql).toContain('"public"."directory_roles"');
+    const plan = planApply(batch(sql), empty);
+    expect(plan[0]).toBe('CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA "public";');
+    const pagingIndexes = [
+      ["idx_companies_created_at", 'btree ( "created_at" )'],
+      ["idx_companies_name_trgm", 'gin ( "name" "public"."gin_trgm_ops" )'],
+      ["idx_companies_alias_trgm", 'gin ( "alias" "public"."gin_trgm_ops" )'],
+      ["idx_companies_trade_name_trgm", 'gin ( "trade_name" "public"."gin_trgm_ops" )'],
+      ["idx_probity_clients_company_listed", 'btree ( "company_listed" )'],
+      ["idx_probity_clients_company_id", 'btree ( "company_id" )'],
+      ["idx_suppliers_name", 'btree ( "name" )'],
+      ["idx_dept_emails_sort_order_id", 'btree ( "sort_order" , "id" )'],
+      ["idx_dept_emails_department", 'btree ( "department" )'],
+    ];
+    for (const [name, definition] of pagingIndexes) {
+      expect(declarations.find((d) => d.name === name)?.sql).toContain(definition);
+    }
   });
   it("parses quoted semicolons, escaped quotes and nested/line comments without splitting string data", () => {
     const sql = `-- heading;\nCREATE TABLE "suppliers" ("name" text DEFAULT 'a; b''s'); /* outer /* inner; */ end */`;
@@ -75,6 +93,12 @@ describe("closed SQL grammar", () => {
     "ALTER TABLE contacts ADD CONSTRAINT x FOREIGN KEY (company_id) REFERENCES other.companies(id);",
     "CREATE TABLE other.companies (id bigint);", "CREATE INDEX x ON other.companies (id);",
     "CREATE INDEX x ON users (id);", "CREATE INDEX x ON companies (users.id);",
+    "CREATE EXTENSION hstore;", "CREATE EXTENSION IF NOT EXISTS hstore;", "CREATE EXTENSION pg_trgm;",
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;", "CREATE EXTENSION IF NOT EXISTS pg_trgm CASCADE;",
+    "CREATE INDEX x ON companies USING gist (name gin_trgm_ops);",
+    "CREATE INDEX x ON companies USING gin (name text_ops);", "CREATE INDEX x ON companies (name gin_trgm_ops);",
+    "CREATE INDEX x ON companies USING gin (name other.gin_trgm_ops);",
+    "CREATE INDEX IF EXISTS x ON companies (id);", "CREATE INDEX IF NOT EXISTS x ON users (id);",
     "CREATE TABLE companies (id bigint DEFAULT nextval('users_id_seq'));",
     "CREATE TABLE companies (id bigint REFERENCES users(id));",
     "CREATE TABLE companies AS SELECT * FROM users;", "CREATE TABLE companies (name text) INHERITS (users);",
@@ -91,6 +115,19 @@ describe("closed SQL grammar", () => {
 });
 
 describe("bootstrap planning", () => {
+  it("orders and deduplicates pg_trgm, qualifies the installed schema and skips a repeat apply", () => {
+    const sql = batch(trgmIndex + extension + extension);
+    expect(planApply(sql, empty)).toEqual([
+      'CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA "public";',
+      'CREATE INDEX idx_name_trgm ON "public"."companies" USING gin ( name "public"."gin_trgm_ops" );',
+    ]);
+    const installed = { ...empty, trigramSchema: 'ext"tools' };
+    expect(planApply(sql, installed)).toEqual([
+      'CREATE INDEX idx_name_trgm ON "public"."companies" USING gin ( name "ext""tools"."gin_trgm_ops" );',
+    ]);
+    expect(planApply(sql, { ...installed, indexes: [{ name: "idx_name_trgm", table: "companies" }] })).toEqual([]);
+    expect(validateBatch(batch("CREATE INDEX IF NOT EXISTS idx_id ON companies USING btree (id);"))[0].kind).toBe("index");
+  });
   it("skips existing tables, indexes and constraints only by their own kind and owner", () => {
     expect(planApply(batch(table + index + constraint), {
       tables: [{ name: "companies", columns: [...columns].reverse() }],
@@ -117,7 +154,7 @@ describe("runner (no database)", () => {
   it("dry run performs only catalog reads, on one released connection, and closes the pool", async () => {
     expect(await run([])).toBe(0);
     expect(mocks.export).toHaveBeenCalledWith(process.execPath, [expect.stringMatching(/bin\.cjs$/), "export"], expect.any(Object));
-    expect(mocks.query).toHaveBeenCalledTimes(3);
+    expect(mocks.query).toHaveBeenCalledTimes(4);
     expect(mocks.query.mock.calls.every(([sql]) => sql.trim().startsWith("SELECT"))).toBe(true);
     expect(mocks.connect).toHaveBeenCalledTimes(1);
     expect(mocks.release).toHaveBeenCalledTimes(1);
@@ -139,10 +176,22 @@ describe("runner (no database)", () => {
     expect(await run(["--apply"])).toBe(0);
     const queries = mocks.query.mock.calls.map(([sql]) => sql.trim());
     expect(queries[0]).toBe("BEGIN");
-    expect(queries.slice(4)).toEqual(["SET LOCAL search_path = pg_catalog", ...planApply(batch(table + index + constraint), empty), "COMMIT"]);
+    expect(queries.slice(5)).toEqual(["SET LOCAL search_path = pg_catalog", ...planApply(batch(table + index + constraint), empty), "COMMIT"]);
     expect(mocks.connect).toHaveBeenCalledTimes(1);
     expect(mocks.end).toHaveBeenCalledTimes(1);
     expect(mocks.release).toHaveBeenCalledTimes(1);
+  });
+  it.each([undefined, "extensions"])("uses the catalog's pg_trgm schema when applying: %s", async (schema) => {
+    mocks.export.mockReturnValue(trgmIndex);
+    mocks.query.mockImplementation(async (sql: string) => ({
+      rows: schema && sql.includes("pg_catalog.pg_extension") ? [{ schema }] : [],
+    }));
+    expect(await run(["--apply"])).toBe(0);
+    const ddl = mocks.query.mock.calls.map(([sql]) => sql.trim()).filter((sql) => sql.startsWith("CREATE"));
+    expect(ddl).toEqual([
+      ...(schema ? [] : ['CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA "public";']),
+      `CREATE INDEX idx_name_trgm ON "public"."companies" USING gin ( name "${schema ?? "public"}"."gin_trgm_ops" );`,
+    ]);
   });
   it("rolls back a failing statement and never executes the rest or commits", async () => {
     mocks.query.mockImplementation(async (sql: string) => {

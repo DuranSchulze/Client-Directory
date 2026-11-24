@@ -6,6 +6,10 @@ export const dept_emails_tb = pgTable("dept_emails", {
   name: text("name"), title: text("title"),
   emails: text("emails").array().notNull().default([]),
   sortOrder: integer("sort_order").notNull().default(0),
-}, (t) => [index("idx_dept_emails_emails").using("gin", t.emails)]);
+}, (t) => [
+  index("idx_dept_emails_emails").using("gin", t.emails),
+  index("idx_dept_emails_sort_order_id").on(t.sortOrder, t.id),
+  index("idx_dept_emails_department").on(t.department),
+]);
 
 export type DeptEmailRow = typeof dept_emails_tb.$inferSelect;
