@@ -3,13 +3,13 @@ import { AppError } from "@/lib/errors";
 import { contactDto } from "@/lib/dto";
 import { EMAIL_RE, isFreeMail, normEmail } from "@/lib/normalize";
 import type { CandidateItem, NeedsCompanyItem, NeedsCompanyPage } from "@/lib/api-types";
-import { findApprovedCandidate, listUnlinkedCandidateEmails, listUnlinkedCandidates, pageUnlinkedCandidates } from "@/repositories/candidates.repository";
+import { findApprovedCandidate, listNeedsQueue, listUnlinkedCandidates } from "@/repositories/candidates.repository";
 import { findCompany, listCompanies } from "@/repositories/companies.repository";
 import { deleteContact, findContact, insertContact, listContacts } from "@/repositories/contacts.repository";
 import { lockEmailOwnership } from "@/repositories/ownership.repository";
 import { assertEmailsAvailable } from "./contacts.service";
 import { refreshProbityMatches } from "./probity.service";
-import { invalidateCompanyRollupCache, writeCompanyRollups } from "./company-rollup-cache";
+import { invalidateCompanyRollupCache, readNeedsQueueCache, writeCompanyRollups, type NeedsQueue } from "./company-rollup-cache";
 import { emails, id, object, validatePaging } from "./validation.service";
 
 const emailDomain = (email: string) => email.toLowerCase().split("@")[1];
@@ -23,24 +23,56 @@ export function suggestCompany(candidate: CandidateItem, companies: { id: number
   const company = companies.find((company) => companyIds.has(company.id));
   return company ? { companyId: company.id, name: company.name } : null;
 }
+/** The whole queue with suggestions, built in one read and kept by the 60 s cache; writes that change it clear the cache. */
+async function buildNeedsQueue(): Promise<NeedsQueue> {
+  const [queue, companies, contacts] = await withTransaction(async (tx) => {
+    await tx.setTransaction({ isolationLevel: "repeatable read", accessMode: "read only" });
+    return Promise.all([listNeedsQueue(tx), listCompanies(tx), listContacts(undefined, tx)]);
+  });
+  // Same pick as suggestCompany (first client in list order that owns a contact on one of the domains), indexed once instead of per row.
+  const rank = new Map(companies.map((company, index) => [company.id, index]));
+  const byDomain = new Map<string, Set<number>>();
+  for (const contact of contacts) {
+    for (const domain of new Set(contact.emails.map(emailDomain))) {
+      if (!domain) continue;
+      const ids = byDomain.get(domain) ?? new Set<number>();
+      ids.add(contact.companyId);
+      byDomain.set(domain, ids);
+    }
+  }
+  const contactDomains = new Set([...byDomain].filter(([domain, ids]) => !isFreeMail(domain) && [...ids].some((id) => rank.has(id))).map(([domain]) => domain));
+  const items = queue.map((candidate): NeedsCompanyItem => {
+    const addresses = (candidate.fields.emails?.value ?? []).filter((email): email is string => typeof email === "string");
+    let best: number | undefined;
+    for (const domain of new Set(addresses.map(emailDomain))) {
+      if (!domain || isFreeMail(domain)) continue;
+      for (const id of byDomain.get(domain) ?? []) {
+        const at = rank.get(id);
+        if (at !== undefined && (best === undefined || at < best)) best = at;
+      }
+    }
+    return { ...candidate, suggestion: best === undefined ? null : { companyId: companies[best].id, name: companies[best].name } };
+  });
+  const suggested = items.filter((item) => (item.fields.emails?.value ?? []).some((email) => typeof email === "string" && contactDomains.has(emailDomain(email)))).length;
+  return { items, suggested };
+}
+
+/** Literal, case-insensitive match on name, company or any email, as the old SQL strpos search. */
+export function matchesQueueSearch(item: NeedsCompanyItem, search: string) {
+  const needle = search.toLowerCase();
+  const f = item.fields;
+  return [f.name?.value, f.company?.value].some((v) => typeof v === "string" && v.toLowerCase().includes(needle))
+    || (f.emails?.value ?? []).some((email) => typeof email === "string" && normEmail(email).includes(needle));
+}
+
+/** The cached whole queue; the counts badge reads it too, so neither runs its own scan. */
+export const getNeedsQueue = () => readNeedsQueueCache(buildNeedsQueue);
+
 export async function getNeedsCompany(params: Parameters<typeof validatePaging>[0]): Promise<NeedsCompanyPage> {
   const { limit, offset, search } = validatePaging(params);
-
-  const [{ items, total }, queue, companies, contacts] = await withTransaction(async (tx) => {
-    await tx.setTransaction({ isolationLevel: "repeatable read", accessMode: "read only" });
-    return Promise.all([
-      pageUnlinkedCandidates(limit, offset, search, tx), listUnlinkedCandidateEmails(tx), listCompanies(tx), listContacts(undefined, tx),
-    ]);
-  });
-  const companyIds = new Set(companies.map((company) => company.id));
-  const contactDomains = new Set(contacts.filter((contact) => companyIds.has(contact.companyId))
-    .flatMap((contact) => contact.emails.map(emailDomain)).filter((domain) => domain && !isFreeMail(domain)));
-
-  return {
-    items: items.map((candidate) => ({ ...candidate, suggestion: suggestCompany(candidate, companies, contacts) })),
-    total,
-    suggested: queue.filter(({ emails }) => emails.some((email) => typeof email === "string" && contactDomains.has(emailDomain(email)))).length,
-  };
+  const { items, suggested } = await getNeedsQueue();
+  const rows = search ? items.filter((item) => matchesQueueSearch(item, search)) : items;
+  return { items: rows.slice(offset, offset + limit), total: rows.length, suggested };
 }
 type Tx = Parameters<Parameters<typeof withTransaction>[0]>[0];
 const validEmails = (raw: unknown) => emails(Array.isArray(raw) ? raw.filter((email): email is string => typeof email === "string" && EMAIL_RE.test(normEmail(email))).map(normEmail) : []);

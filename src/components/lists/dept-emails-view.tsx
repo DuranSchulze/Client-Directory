@@ -23,7 +23,7 @@ export function DeptEmailsView() {
   const qc = useQueryClient();
   const url = usePagedUrlState();
   const dept = url.get("dept");
-  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(deptEmailsPageQuery, dept ? { ...url.params, dept } : url.params);
+  const { data, isPending, isPlaceholderData, error, refetch } = usePagedList(deptEmailsPageQuery, dept ? { ...url.params, dept } : url.params);
   const [editing, setEditing] = useState<DeptEmailItem | "new" | null>(null);
   // Server returns the page in sheet order (sort order, then id); departments cover the whole list, not just this page.
   const rows = data?.items ?? [];
@@ -77,7 +77,7 @@ export function DeptEmailsView() {
       )}
       <DataTableCard title="Internal mailboxes" rows={rows} columns={columns} getRowId={(d) => d.id} itemLabel="mailboxes" showRowNumbers={false}
         groupBy={(d) => d.department}
-        loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
+        loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
         paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
         page={url.page} onPageChange={url.onPageChange} size={url.size} onSizeChange={url.onSizeChange}
         onRowClick={(d) => setEditing(d)} rowLabel={(d) => `Edit ${d.name ?? d.emails[0]}`}

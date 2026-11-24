@@ -103,7 +103,7 @@ export function NeedsCompanyView() {
           : isPending ? <PlaceholderRows rows={4} />
           : total === 0 && !query ? <EmptyState icon={CircleCheck} title="Every approved Gmail contact belongs to a client." />
           : total === 0 ? <EmptyState icon={SearchX} title="No contact matches that search." actionLabel="Clear search" onAction={clearSearch} />
-          : <ul aria-busy={isFetching} className={cn("flex flex-col gap-2 px-2 pb-2 transition-opacity", isFetching && "opacity-60")}>{visible.map((it) => <QueueRow key={it.id} item={it} />)}</ul>}
+          : <ul aria-busy={settling} className={cn("flex flex-col gap-2 px-2 pb-2 transition-opacity", isPlaceholderData && "opacity-60")}>{visible.map((it) => <QueueRow key={it.id} item={it} />)}</ul>}
         {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-3 pb-4 text-xs text-muted-foreground">
             <span className="hidden sm:inline">{settling ? "Loading…" : `Showing ${start + 1} to ${Math.min(start + size, total)} of ${total} contacts`}</span>

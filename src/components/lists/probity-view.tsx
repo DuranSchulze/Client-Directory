@@ -39,7 +39,7 @@ export function ProbityView() {
   const router = useRouter();
   const qc = useQueryClient();
   const url = usePagedUrlState();
-  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(probityPageQuery, url.params);
+  const { data, isPending, isPlaceholderData, error, refetch } = usePagedList(probityPageQuery, url.params);
   const [editing, setEditing] = useState<ProbityItem | "new" | null>(null);
   const rows = data?.items ?? [];
 
@@ -75,7 +75,7 @@ export function ProbityView() {
       <PageHeader title="Probity" description={!data ? "Probity Clients tab, cross-checked against All Clients." : `${data.matched} of ${data.all} rows matched to a client by email or name. Matched rows open the client.`}
         actions={<Button onClick={() => setEditing("new")}><Plus />Add probity row</Button>} />
       <DataTableCard title="Probity clients" rows={rows} columns={columns} getRowId={(p) => p.id} itemLabel="rows"
-        loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
+        loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
         paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
         sort={url.sort} onSortChange={url.onSortChange} page={url.page} onPageChange={url.onPageChange} size={url.size} onSizeChange={url.onSizeChange}
         onRowClick={(p) => (p.companyId ? router.push(`/clients?id=${p.companyId}`) : setEditing(p))}

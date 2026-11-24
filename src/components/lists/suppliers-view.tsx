@@ -29,7 +29,7 @@ const toBody = (v: RecordValues): SupplierInput => ({ name: textOrNull(v.name), 
 export function SuppliersView() {
   const qc = useQueryClient();
   const url = usePagedUrlState();
-  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(suppliersPageQuery, url.params);
+  const { data, isPending, isPlaceholderData, error, refetch } = usePagedList(suppliersPageQuery, url.params);
   const [editing, setEditing] = useState<SupplierItem | "new" | null>(null);
   const rows = data?.items ?? [];
 
@@ -53,7 +53,7 @@ export function SuppliersView() {
       <PageHeader title="OPS suppliers" description="Suppliers and contractors from the OPS Supplier tab. A separate list; never matched to clients."
         actions={<Button onClick={() => setEditing("new")}><Plus />Add supplier</Button>} />
       <DataTableCard title="Suppliers" rows={rows} columns={columns} getRowId={(s) => s.id} itemLabel="suppliers"
-        loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
+        loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
         paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
         sort={url.sort} onSortChange={url.onSortChange} page={url.page} onPageChange={url.onPageChange} size={url.size} onSizeChange={url.onSizeChange}
         onRowClick={(s) => setEditing(s)} rowLabel={(s) => `Edit ${s.name ?? "supplier"}`}

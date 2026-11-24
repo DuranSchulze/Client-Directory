@@ -1,4 +1,5 @@
 import { withTransaction } from "@/db";
+import { writeCompanyRollups } from "./company-rollup-cache";
 import { AppError } from "@/lib/errors";
 import { deptEmailDto } from "@/lib/dto";
 import type { DeptEmailsPage } from "@/lib/api-types";
@@ -25,7 +26,8 @@ export async function getDeptEmail(id: number) {
 }
 export async function saveDeptEmail(body: unknown, id?: number) {
   const input = validateDeptEmail(body, id !== undefined);
-  return withTransaction(async (tx) => {
+  // A mailbox address leaves the Needs-company queue, so the cached queue is cleared after the write.
+  return writeCompanyRollups(async (tx) => {
     await lockEmailOwnership(tx);
     const old = id === undefined ? null : await repo.findDeptEmailById(id, tx);
     if (id !== undefined && !old) throw new AppError(404, "Department email not found");

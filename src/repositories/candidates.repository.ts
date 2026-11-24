@@ -24,13 +24,13 @@ function linkedCandidates(companyId: number | undefined, ex: Executor, selectedF
 export async function listLinkedCandidates(companyId: number | undefined = undefined, ex: Executor = db) {
   return linkedCandidates(companyId, ex);
 }
+// One field with the same flat reviewed override as `fields`, without merging the timeline and other unused fields.
+const effective = (key: "name" | "company" | "stage" | "last_contact" | "emails") => {
+  const edit = sql`(${candidates.reviewed}->${key}::text)`;
+  return sql`(case when ${edit} is null or (jsonb_typeof(${edit}) = 'object' and jsonb_exists(${edit}, 'value'))
+    then ${candidates.fields}->${key}::text else jsonb_build_object('value', ${edit}) end)`;
+};
 export async function listLinkedCandidateRollups(ex: Executor) {
-  // Apply the same flat reviewed overrides without merging the timeline and other unused fields.
-  const effective = (key: "stage" | "last_contact" | "emails") => {
-    const edit = sql`(${candidates.reviewed}->${key}::text)`;
-    return sql`(case when ${edit} is null or (jsonb_typeof(${edit}) = 'object' and jsonb_exists(${edit}, 'value'))
-      then ${candidates.fields}->${key}::text else jsonb_build_object('value', ${edit}) end)`;
-  };
   const rollupFields = sql<CandidateFields>`jsonb_build_object(
     'stage', ${effective("stage")},
     'last_contact', ${effective("last_contact")},
@@ -47,22 +47,18 @@ export async function listUnlinkedCandidates(ex: Executor = db) {
   return ex.select({ id: candidates.id, fields }).from(candidates).where(unlinked).orderBy(candidates.id).limit(5000);
 }
 
-export async function pageUnlinkedCandidates(limit: number, offset: number, q: string, ex: Executor = db) {
-  const filter = and(unlinked, q ? sql`(
-    strpos(lower(${fields}->'name'->>'value'), lower(${q})) > 0
-    OR strpos(lower(${fields}->'company'->>'value'), lower(${q})) > 0
-    OR EXISTS (SELECT 1 FROM unnest(${emails}) AS address(email) WHERE strpos(email, lower(${q})) > 0)
-  )` : undefined);
-  const [items, [summary]] = await Promise.all([
-    ex.select({ id: candidates.id, fields }).from(candidates).where(filter).orderBy(candidates.id).limit(limit).offset(offset),
-    ex.select({ total: count() }).from(candidates).where(filter),
-  ]);
-  return { items, total: summary.total };
+/** The whole Needs-company queue in one pass, with only the fields the queue shows (same rules as `unlinked`). */
+export async function listNeedsQueue(ex: Executor = db) {
+  const queueEmails = normalizedEmails(sql`${effective("emails")}->'value'`);
+  const queueFields = sql<CandidateFields>`jsonb_strip_nulls(jsonb_build_object(
+    'name', ${effective("name")}, 'company', ${effective("company")}, 'stage', ${effective("stage")},
+    'last_contact', ${effective("last_contact")}, 'emails', ${effective("emails")}))`;
+  return ex.select({ id: candidates.id, fields: queueFields }).from(candidates).where(and(eq(candidates.reviewState, "approved"),
+    sql`cardinality(${queueEmails}) > 0`,
+    sql`NOT EXISTS (SELECT 1 FROM ${contacts} WHERE ${contacts.emails} && ${queueEmails})`,
+    sql`NOT EXISTS (SELECT 1 FROM ${dept} WHERE ${dept.emails} && ${queueEmails})`)).orderBy(candidates.id);
 }
 
-export async function listUnlinkedCandidateEmails(ex: Executor = db) {
-  return ex.select({ emails: sql<string[]>`${fields}->'emails'->'value'` }).from(candidates).where(unlinked);
-}
 export async function findApprovedCandidate(id: number, ex: Executor = db) {
   return (await ex.select({ id: candidates.id, fields }).from(candidates).where(and(eq(candidates.id, id), eq(candidates.reviewState, "approved"))).limit(1))[0] ?? null;
 }

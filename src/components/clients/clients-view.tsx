@@ -71,7 +71,7 @@ export function ClientsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [get, page, size]);
   // Every Clients page request re-reads the cached rollup on the server, so only page 2 is prefetched.
-  const { data, isPending, isFetching, isPlaceholderData, error, refetch } = usePagedList(companiesPageQuery, params, 1);
+  const { data, isPending, isPlaceholderData, error, refetch } = usePagedList(companiesPageQuery, params, 1);
   const rows = data?.items ?? [];
   const services = data?.facets.services ?? [];
   const supervisors = data?.facets.supervisors ?? [];
@@ -190,7 +190,7 @@ export function ClientsView() {
       </div>
 
       <DataTableCard title="Clients" rows={rows} columns={columns} getRowId={(c) => c.id} itemLabel="clients"
-        loading={isPending} refetching={isFetching && !isPending} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
+        loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
         paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
         onRowClick={(c) => set({ id: c.id })} rowLabel={(c) => `Open ${c.name}`}
         rowClassName={(c) => (c.id === openId ? "[&>td]:bg-[color-mix(in_srgb,var(--primary)_10%,var(--card))]" : undefined)}
