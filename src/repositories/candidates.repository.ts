@@ -5,7 +5,7 @@ import { ext_candidates as candidates } from "@/db/external/candidates";
 import { companies_tb as companies } from "@/db/schema/companies";
 import { contacts_tb as contacts } from "@/db/schema/contacts";
 import { dept_emails_tb as dept } from "@/db/schema/dept-emails";
-import type { InquiriesPage, Inquiry } from "@/lib/api-types";
+import type { InquiriesPage, Inquiry, InquiryTimeline } from "@/lib/api-types";
 import type { CandidateFields } from "@/lib/candidate-types";
 import { pageOrder, substringFilter, type PageWindow, type SortDirection } from "./paging";
 
@@ -51,6 +51,12 @@ export const INQUIRY_SORT_COLUMNS = {
 export async function countInquiries(ex: Executor, filter?: SQL) {
   const [{ total }] = await ex.select({ total: count() }).from(candidates).where(and(inquiries, filter));
   return total;
+}
+
+export async function findInquiryTimeline(id: number) {
+  const [row] = await db.select({ timeline: sql<InquiryTimeline | null>`${effective("timeline")}->'value'` })
+    .from(candidates).where(and(eq(candidates.id, id), inquiries));
+  return row;
 }
 
 export async function listInquiriesPage(

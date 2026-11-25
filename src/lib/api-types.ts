@@ -26,6 +26,7 @@ export type Inquiry = {
   };
   client: { companyId: number; name: string } | null;
 };
+export type InquiryTimeline = { items: TimelineItem[]; truncated: boolean };
 export type Activity = {
   candidates: CandidateItem[]; stage: Stage | null; stageDates: Partial<Record<Stage, string>>;
   summary: {
