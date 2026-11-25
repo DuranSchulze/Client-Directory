@@ -13,32 +13,65 @@ import { usePagedList, usePagedUrlState } from "@/lib/api/use-paged-list";
 import type { Inquiry } from "@/lib/api-types";
 import { ago, DASH } from "@/lib/format";
 
+/** The instant the server sorts by: offset-free dates are UTC, impossible dates (2026-02-30) are missing. */
+export function contactInstant(value: string | null | undefined): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
+  const zoned = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?$/.test(value) ? `${value.replace(" ", "T")}${value.length === 10 ? "T00:00:00" : ""}Z` : value;
+  const t = Date.parse(zoned);
+  if (Number.isNaN(t)) return null;
+  const iso = new Date(t).toISOString();
+  // JavaScript rolls 2026-02-30 over to March 2; the server rejects it.
+  return zoned.endsWith("Z") && iso.slice(0, 10) !== value.slice(0, 10) ? null : iso;
+}
+
+function LastContact({ value }: { value: string | null | undefined }) {
+  const at = contactInstant(value);
+  return at ? <time dateTime={at} title={new Date(at).toUTCString()}>{ago(at)}</time> : <>{DASH}</>;
+}
+function ClientLink({ client }: { client: Inquiry["client"] }) {
+  return client
+    ? <Link href={`/clients?id=${client.companyId}`} className="link-draw font-semibold text-primary-text">{client.name}</Link>
+    : <span className="text-muted-foreground">Not a client yet</span>;
+}
+
+const SORTS = [
+  { value: "last_contact:desc", label: "Newest contact" }, { value: "last_contact:asc", label: "Oldest contact" },
+  { value: "name:asc", label: "Name A-Z" }, { value: "name:desc", label: "Name Z-A" },
+  { value: "company:asc", label: "Company A-Z" }, { value: "company:desc", label: "Company Z-A" },
+  { value: "stage:asc", label: "Stage, first to last" }, { value: "stage:desc", label: "Stage, last to first" },
+];
+
 export function InquiriesView() {
   const url = usePagedUrlState("last_contact:desc");
   const { data, isPending, isPlaceholderData, error, refetch } = usePagedList(inquiriesPageQuery, url.params);
   const rows = data?.items ?? [];
+  const sortValue = url.sort ? `${url.sort.key}:${url.sort.dir}` : "last_contact:desc";
 
   const columns: Column<Inquiry>[] = [
-    { key: "name", header: "Inquirer", sortValue: (i) => i.fields.name?.value ?? "", className: "min-w-[14rem]", render: (i) => {
+    { key: "name", header: "Inquirer", sortValue: (i) => i.fields.name?.value ?? "", className: "md:min-w-[14rem]", render: (i) => {
       const emails = (i.fields.emails?.value ?? []).filter((e): e is string => typeof e === "string");
       return (
-        <div className="flex flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-2 font-semibold">
             {i.fields.name?.value ?? <span className="font-normal text-muted-foreground">No name</span>}
             {i.reviewState === "pending" && <Pill tone="warning" className="text-[11px]">Not reviewed</Pill>}
           </span>
-          {emails.map((e) => <a key={e} href={`mailto:${e}`} onClick={(ev) => ev.stopPropagation()} className="link-draw w-fit break-all text-xs text-muted-foreground">{e}</a>)}
+          {emails.map((e) => <a key={e} href={`mailto:${e}`} className="link-draw w-fit break-all text-xs text-muted-foreground">{e}</a>)}
+          {/* Phone width: the other columns stack here. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs md:hidden">
+            {i.fields.company?.value && <span>{i.fields.company.value}</span>}
+            {i.fields.stage?.value && <Pill tone="neutral" className="text-[11px]">{STAGE_LABEL[i.fields.stage.value]}</Pill>}
+            <span className="text-muted-foreground">Last contact <LastContact value={i.fields.last_contact?.value} /></span>
+            <ClientLink client={i.client} />
+          </div>
         </div>
       );
     } },
-    { key: "company", header: "Company", sortValue: (i) => i.fields.company?.value ?? "", render: (i) => i.fields.company?.value ?? DASH },
-    { key: "stage", header: "Stage", sortValue: (i) => i.fields.stage?.value ?? "", render: (i) => i.fields.stage?.value ? <Pill tone="neutral">{STAGE_LABEL[i.fields.stage.value]}</Pill> : DASH },
-    { key: "department", header: "Department", desktopOnly: true, className: "text-muted-foreground", render: (i) => i.fields.department?.value ?? DASH },
-    { key: "last_contact", header: "Last contact", sortValue: (i) => i.fields.last_contact?.value ?? "", className: "whitespace-nowrap tabular-nums",
-      render: (i) => i.fields.last_contact?.value ? <time dateTime={i.fields.last_contact.value} title={new Date(i.fields.last_contact.value).toLocaleString()}>{ago(i.fields.last_contact.value)}</time> : DASH },
-    { key: "client", header: "Client", render: (i) => i.client
-      ? <Link href={`/clients?id=${i.client.companyId}`} className="link-draw font-semibold text-primary-text">{i.client.name}</Link>
-      : <span className="text-muted-foreground">Not a client yet</span> },
+    { key: "company", header: "Company", desktopOnly: true, sortValue: (i) => i.fields.company?.value ?? "", render: (i) => i.fields.company?.value ?? DASH },
+    { key: "stage", header: "Stage", desktopOnly: true, sortValue: (i) => i.fields.stage?.value ?? "", render: (i) => i.fields.stage?.value ? <Pill tone="neutral">{STAGE_LABEL[i.fields.stage.value]}</Pill> : DASH },
+    { key: "department", header: "Department", wideOnly: true, className: "text-muted-foreground", render: (i) => i.fields.department?.value ?? DASH },
+    { key: "last_contact", header: "Last contact", desktopOnly: true, sortValue: (i) => i.fields.last_contact?.value ?? "", className: "whitespace-nowrap tabular-nums", render: (i) => <LastContact value={i.fields.last_contact?.value} /> },
+    { key: "client", header: "Client", desktopOnly: true, render: (i) => <ClientLink client={i.client} /> },
   ];
 
   return (
@@ -48,7 +81,15 @@ export function InquiriesView() {
         loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
         paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
         sort={url.sort} onSortChange={url.onSortChange} page={url.page} onPageChange={url.onPageChange} size={url.size} onSizeChange={url.onSizeChange}
-        search={<TableSearch value={url.qInput} onChange={url.setQInput} placeholder="Search name, company or email" />}
+        search={<>
+          <TableSearch value={url.qInput} onChange={url.setQInput} placeholder="Search name, company or email" />
+          <label className="flex w-full items-center gap-2 text-xs font-bold text-muted-foreground md:hidden">
+            Sort
+            <select value={sortValue} onChange={(e) => url.set({ sort: e.target.value, page: null })} className="field-select h-9 w-full font-normal">
+              {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </label>
+        </>}
         empty={url.q ? <EmptyState icon={SearchX} title="No inquiries match this search." actionLabel="Clear search" onAction={url.clearSearch} />
           : <EmptyState icon={MessageSquareText} title="No inquiries yet." description="They appear once the Scraper marks a contact as an inquiry." />} />
     </PageShell>
