@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import type {
-  AccountsResponse, AuthResponse, CompaniesPage, CompaniesResponse, DeptEmailsPage, ProbityPage, SuppliersPage, RolesResponse, CompanyDetailResponse, CountsResponse, DeptEmailsResponse,
+  AccountsResponse, AuthResponse, CompaniesPage, CompaniesResponse, DeptEmailsPage, ProbityPage, SuppliersPage, RolesResponse, CompanyDetailResponse, CountsResponse, DeptEmailsResponse, InquiriesPage,
   MasterUploadResponse, NeedsCompanyResponse, ProbityResponse, ScrapeStatus, SuppliersResponse,
 } from "@/lib/api-types";
 import { request } from "./http";
@@ -14,6 +14,7 @@ export const keys = {
   suppliers: ["suppliers"] as const,
   deptEmails: ["dept-emails"] as const,
   needsCompany: ["needs-company"] as const,
+  inquiries: ["inquiries"] as const,
   users: ["users"] as const,
   roles: ["roles"] as const,
   masterUpload: ["master-upload"] as const,
@@ -43,6 +44,7 @@ export const companiesPageQuery = pagedQuery<CompaniesPage>(keys.companies, "/ap
 export const probityPageQuery = pagedQuery<ProbityPage>(keys.probity, "/api/probity");
 export const suppliersPageQuery = pagedQuery<SuppliersPage>(keys.suppliers, "/api/suppliers");
 export const deptEmailsPageQuery = pagedQuery<DeptEmailsPage>(keys.deptEmails, "/api/dept-emails");
+export const inquiriesPageQuery = pagedQuery<InquiriesPage>(keys.inquiries, "/api/inquiries");
 export const masterUploadQuery = queryOptions({ queryKey: keys.masterUpload, queryFn: () => request<MasterUploadResponse>("/api/import/xlsx").then((r) => r.item.lastMasterUpload) });
 export const usersQuery = queryOptions({ queryKey: keys.users, queryFn: () => request<AccountsResponse>("/api/users").then((r) => r.items) });
 export const rolesQuery = queryOptions({ queryKey: keys.roles, queryFn: () => request<RolesResponse>("/api/roles").then((r) => r.items) });

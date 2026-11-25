@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
-import { Building2, Contact, FileSpreadsheet, Inbox, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, Truck, UsersRound } from "lucide-react";
+import { Building2, Contact, FileSpreadsheet, Inbox, LogOut, Menu, MessageSquareText, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, Truck, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -27,6 +27,7 @@ const NAV: { href: string; label: string; icon: React.ElementType; route: RouteK
   // Probity shows unmatched rows when there are any, else the total.
   { href: "/probity", label: "Probity", icon: ShieldCheck, route: "directory", badge: (c) => c ? (c.probityUnmatched ? { value: c.probityUnmatched, hot: true } : { value: c.probity, hot: false }) : null },
   { href: "/needs-company", label: "Needs company", icon: Inbox, route: "directory", badge: (c) => c ? { value: c.needsCompany, hot: c.needsCompany > 0 } : null },
+  { href: "/inquiries", label: "Inquiries", icon: MessageSquareText, route: "directory", badge: (c) => c ? { value: c.inquiries, hot: false } : null },
   { href: "/suppliers", label: "OPS suppliers", icon: Truck, route: "directory", badge: (c) => c ? { value: c.suppliers, hot: false } : null },
   { href: "/dept-emails", label: "Department emails", icon: Contact, route: "directory", badge: (c) => c ? { value: c.deptEmails, hot: false } : null },
   { href: "/import", label: "Import", icon: FileSpreadsheet, route: "import", badge: none },
