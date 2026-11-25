@@ -6,6 +6,7 @@ import { Contact, Plus, SearchX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { LastUpdatedNote } from "@/components/shared/last-updated-note";
 import { PageShell } from "@/components/shared/page-shell";
 import { DataTableCard, TableSearch, type Column } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -59,7 +60,7 @@ export function DeptEmailsView() {
 
   return (
     <PageShell>
-      <PageHeader title="Department emails" description="Internal staff and shared mailboxes. These addresses are never clients and never land in Needs company."
+      <PageHeader note={<LastUpdatedNote source="excel" />} title="Department emails" description="Internal staff and shared mailboxes. These addresses are never clients and never land in Needs company."
         actions={<Button onClick={() => setEditing("new")}><Plus />Add mailbox</Button>} />
       {tops.length > 1 && (
         <div role="group" aria-label="Filter by department" className="flex flex-wrap gap-2">

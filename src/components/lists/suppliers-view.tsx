@@ -6,6 +6,7 @@ import { Plus, SearchX, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { LastUpdatedNote } from "@/components/shared/last-updated-note";
 import { PageShell } from "@/components/shared/page-shell";
 import { DataTableCard, TableSearch, type Column } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -50,7 +51,7 @@ export function SuppliersView() {
 
   return (
     <PageShell>
-      <PageHeader title="OPS suppliers" description="Suppliers and contractors from the OPS Supplier tab. A separate list; never matched to clients."
+      <PageHeader note={<LastUpdatedNote source="excel" />} title="OPS suppliers" description="Suppliers and contractors from the OPS Supplier tab. A separate list; never matched to clients."
         actions={<Button onClick={() => setEditing("new")}><Plus />Add supplier</Button>} />
       <DataTableCard title="Suppliers" rows={rows} columns={columns} getRowId={(s) => s.id} itemLabel="suppliers"
         loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}

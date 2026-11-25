@@ -46,7 +46,6 @@ export function ScrapeBar() {
   let text: React.ReactNode = null;
   if (running) text = <>Scraping mailboxes, started <b className="font-semibold text-foreground">{span(now - Date.parse(running.startedAt))} ago</b>{running.completed > 0 && ` · ${running.completed.toLocaleString()} processed`}</>;
   else if (dueSoon) text = <>Next scrape in <b className="font-semibold text-foreground">{span(nextIn)}</b></>;
-  else if (data.lastFinishedAt) text = <>Last scrape {span(now - Date.parse(data.lastFinishedAt))} ago</>;
   if (!text) return null;
 
   return (

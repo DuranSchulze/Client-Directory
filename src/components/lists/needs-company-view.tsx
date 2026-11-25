@@ -9,6 +9,7 @@ import { Check, ChevronLeft, ChevronRight, ChevronsUpDown, CircleCheck, Link2, P
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PageHeader } from "@/components/shared/page-header";
+import { LastUpdatedNote } from "@/components/shared/last-updated-note";
 import { PageShell } from "@/components/shared/page-shell";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { TableSearch } from "@/components/shared/data-table-card";
@@ -90,7 +91,7 @@ export function NeedsCompanyView() {
   });
   return (
     <PageShell>
-      <PageHeader title="Needs company" description="Approved Gmail contacts whose email is on no client and no internal mailbox. Attach each to a client so its activity shows there."
+      <PageHeader note={<LastUpdatedNote source="scraper" />} title="Needs company" description="Approved Gmail contacts whose email is on no client and no internal mailbox. Attach each to a client so its activity shows there."
         actions={<Button disabled={suggested === 0 || isPending} onClick={() => setConfirm(true)}><Link2 />Attach everything{suggested > 0 && ` (${suggested})`}</Button>} />
       <section aria-label="Unlinked Gmail contacts" className="overflow-hidden rounded-2xl border border-edge bg-card">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4 pb-3">

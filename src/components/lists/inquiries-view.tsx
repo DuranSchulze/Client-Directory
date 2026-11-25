@@ -1,14 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { MessageSquareText, SearchX } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Mail, MessageSquareText, SearchX } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Conversations } from "@/components/shared/conversations";
+import { ErrorState, PlaceholderRows } from "@/components/shared/loadable";
 import { PageHeader } from "@/components/shared/page-header";
+import { LastUpdatedNote } from "@/components/shared/last-updated-note";
 import { PageShell } from "@/components/shared/page-shell";
 import { DataTableCard, TableSearch, type Column } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pill, STAGE_LABEL } from "@/components/shared/pills";
 import { errorMessage } from "@/lib/api/http";
-import { inquiriesPageQuery } from "@/lib/api/queries";
+import { inquiriesPageQuery, inquiryTimelineQuery } from "@/lib/api/queries";
 import { usePagedList, usePagedUrlState } from "@/lib/api/use-paged-list";
 import type { Inquiry } from "@/lib/api-types";
 import { ago, DASH } from "@/lib/format";
@@ -46,6 +53,7 @@ export function InquiriesView() {
   const url = usePagedUrlState("last_contact:desc");
   const { data, isPending, isPlaceholderData, error, refetch } = usePagedList(inquiriesPageQuery, url.params);
   const rows = data?.items ?? [];
+  const [open, setOpen] = useState<Inquiry | null>(null);
   const sortValue = url.sort ? `${url.sort.key}:${url.sort.dir}` : "last_contact:desc";
 
   const columns: Column<Inquiry>[] = [
@@ -55,7 +63,6 @@ export function InquiriesView() {
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-2 font-semibold [overflow-wrap:anywhere]">
             {i.fields.name?.value ?? <span className="font-normal text-muted-foreground">No name</span>}
-            {i.reviewState === "pending" && <Pill tone="warning" className="text-[11px]">Not reviewed</Pill>}
           </span>
           {emails.map((e) => <a key={e} href={`mailto:${e}`} className="link-draw w-fit break-all text-xs text-muted-foreground">{e}</a>)}
           {/* Phone width: the other columns stack here. */}
@@ -65,6 +72,7 @@ export function InquiriesView() {
             <span className="text-muted-foreground">Last contact <LastContact value={i.fields.last_contact?.value} /></span>
             <ClientLink client={i.client} />
           </div>
+          <InboxButton className="mt-1.5 md:hidden" onOpen={() => setOpen(i)} name={i.fields.name?.value} />
         </div>
       );
     } },
@@ -73,11 +81,12 @@ export function InquiriesView() {
     { key: "department", header: "Department", wideOnly: true, className: "text-muted-foreground", render: (i) => i.fields.department?.value ?? DASH },
     { key: "last_contact", header: "Last contact", desktopOnly: true, sortValue: (i) => i.fields.last_contact?.value ?? "", className: "whitespace-nowrap tabular-nums", render: (i) => <LastContact value={i.fields.last_contact?.value} /> },
     { key: "client", header: "Client", desktopOnly: true, render: (i) => <ClientLink client={i.client} /> },
+    { key: "inbox", header: "Inbox", desktopOnly: true, render: (i) => <InboxButton onOpen={() => setOpen(i)} name={i.fields.name?.value} /> },
   ];
 
   return (
     <PageShell>
-      <PageHeader title="Inquiries" description="Everyone the Scraper marked as an inquiry, newest contact first. A client name opens that client." />
+      <PageHeader note={<LastUpdatedNote source="scraper" />} title="Inquiries" description="Everyone the Scraper marked as an inquiry, newest contact first. A client name opens that client." />
       <DataTableCard title="Inquiries" rows={rows} columns={columns} getRowId={(i) => i.id} itemLabel="inquiries"
         loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
         paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
@@ -93,6 +102,39 @@ export function InquiriesView() {
         </>}
         empty={url.q ? <EmptyState icon={SearchX} title="No inquiries match this search." actionLabel="Clear search" onAction={url.clearSearch} />
           : <EmptyState icon={MessageSquareText} title="No inquiries yet." description="They appear once the Scraper marks a contact as an inquiry." />} />
+      <InboxSheet inquiry={open} onClose={() => setOpen(null)} />
     </PageShell>
+  );
+}
+
+function InboxButton({ onOpen, name, className }: { onOpen: () => void; name?: string | null; className?: string }) {
+  return (
+    <Button size="xs" variant="secondary" className={className} onClick={onOpen} aria-label={`View inbox for ${name ?? "this inquiry"}`}>
+      <Mail />View inbox
+    </Button>
+  );
+}
+
+/** The inquirer's messages from the Scraper: subject and first lines, newest first. */
+function InboxSheet({ inquiry, onClose }: { inquiry: Inquiry | null; onClose: () => void }) {
+  const { data, isPending, error, refetch } = useQuery({ ...inquiryTimelineQuery(inquiry?.id ?? 0), enabled: !!inquiry });
+  const name = inquiry?.fields.name?.value ?? "No name";
+  const company = inquiry?.fields.company?.value;
+  return (
+    <Sheet open={inquiry !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-full gap-0 border-0 bg-card p-0 data-[side=right]:w-full sm:max-w-[560px] data-[side=right]:sm:max-w-[560px]">
+        <SheetHeader className="px-5 pt-5 pb-3">
+          <SheetTitle className="text-xl font-bold tracking-tight [overflow-wrap:anywhere]">{name}</SheetTitle>
+          <SheetDescription className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {[company, (inquiry?.fields.emails?.value ?? [])[0]].filter(Boolean).join(" · ") || "Inquiry"}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+          {error ? <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
+            : isPending ? <PlaceholderRows rows={4} />
+            : <Conversations items={data.items} truncated={data.truncated} title="Inbox" />}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

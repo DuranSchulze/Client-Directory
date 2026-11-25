@@ -7,6 +7,7 @@ import { CircleCheck, CircleX, Pencil, Plus, SearchX, ShieldCheck, UserPlus } fr
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { LastUpdatedNote } from "@/components/shared/last-updated-note";
 import { PageShell } from "@/components/shared/page-shell";
 import { DataTableCard, TableSearch, type Column } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -72,7 +73,7 @@ export function ProbityView() {
 
   return (
     <PageShell>
-      <PageHeader title="Probity" description={!data ? "Probity Clients tab, cross-checked against All Clients." : `${data.matched} of ${data.all} rows matched to a client by email or name. Matched rows open the client.`}
+      <PageHeader note={<LastUpdatedNote source="excel" />} title="Probity" description={!data ? "Probity Clients tab, cross-checked against All Clients." : `${data.matched} of ${data.all} rows matched to a client by email or name. Matched rows open the client.`}
         actions={<Button onClick={() => setEditing("new")}><Plus />Add probity row</Button>} />
       <DataTableCard title="Probity clients" rows={rows} columns={columns} getRowId={(p) => p.id} itemLabel="rows"
         loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}

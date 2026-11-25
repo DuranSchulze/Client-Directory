@@ -6,14 +6,14 @@ import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Download, FileSpreadsheet, FileX2, Plus, SearchX, ShieldCheck, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MasterUploadNote } from "@/components/shared/master-upload-note";
+import { LastUpdatedNote } from "@/components/shared/last-updated-note";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageShell } from "@/components/shared/page-shell";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { DataTableCard, TableSearch, type Column, type Sort } from "@/components/shared/data-table-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { EngagementPill, EntityTag, Pill, StageSteps, STAGE_LABEL } from "@/components/shared/pills";
-import { companiesPageQuery, countsQuery, meQuery, type PageParams } from "@/lib/api/queries";
+import { companiesPageQuery, meQuery, type PageParams } from "@/lib/api/queries";
 import { usePagedList } from "@/lib/api/use-paged-list";
 import { errorMessage } from "@/lib/api/http";
 import type { CompanyListItem } from "@/lib/api-types";
@@ -44,7 +44,6 @@ export function ClientsView() {
   const [adding, setAdding] = useState(false);
   const router = useRouter();
   const { data: me } = useQuery(meQuery);
-  const { data: counts } = useQuery(countsQuery);
   const canImport = !!me?.routes.includes("import");
 
   const status = get("status") as Status | "";
@@ -127,7 +126,8 @@ export function ClientsView() {
 
   return (
     <PageShell>
-      <PageHeader title="Clients" description={<>The accounting master list. The Scraper reads these clients and contacts to tag Gmail.<span className="mt-2 flex"><MasterUploadNote upload={counts?.lastMasterUpload} /></span></>}
+      <PageHeader title="Clients" description={"The accounting master list. The Scraper reads these clients and contacts to tag Gmail."}
+        note={<LastUpdatedNote source="excel" />}
         actions={<>
           <Button variant="secondary" nativeButton={false} render={<a href="/api/companies/export" download />}><Download />Export CSV</Button>
           <Button onClick={() => setAdding(true)}><Plus />Add client</Button>
