@@ -2,9 +2,12 @@ import "server-only";
 import { and, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { db, type Executor } from "@/db";
 import { ext_candidates as candidates } from "@/db/external/candidates";
+import { companies_tb as companies } from "@/db/schema/companies";
 import { contacts_tb as contacts } from "@/db/schema/contacts";
 import { dept_emails_tb as dept } from "@/db/schema/dept-emails";
+import type { InquiriesPage, Inquiry } from "@/lib/api-types";
 import type { CandidateFields } from "@/lib/candidate-types";
+import { pageOrder, substringFilter, type PageWindow, type SortDirection } from "./paging";
 
 // Scraper stores `fields` as {key: {value}} but the approved `reviewed` record flat ({key: value}).
 // Wrap the reviewer's edits into the field shape and lay them over `fields`, which keeps timeline, stage_dates and amounts.
@@ -25,11 +28,50 @@ export async function listLinkedCandidates(companyId: number | undefined = undef
   return linkedCandidates(companyId, ex);
 }
 // One field with the same flat reviewed override as `fields`, without merging the timeline and other unused fields.
-const effective = (key: "name" | "company" | "stage" | "last_contact" | "emails") => {
+const effective = (key: keyof CandidateFields) => {
   const edit = sql`(${candidates.reviewed}->${key}::text)`;
   return sql`(case when ${edit} is null or (jsonb_typeof(${edit}) = 'object' and jsonb_exists(${edit}, 'value'))
     then ${candidates.fields}->${key}::text else jsonb_build_object('value', ${edit}) end)`;
 };
+
+const inquiryStates = ["pending", "approved"] satisfies Inquiry["reviewState"][];
+const inquiries = and(inArray(candidates.reviewState, inquiryStates), eq(sql`${effective("status")}->>'value'`, "inquiry"));
+export const INQUIRY_SORT_COLUMNS = {
+  last_contact: sql`${effective("last_contact")}->>'value'`,
+  name: sql`${effective("name")}->>'value'`,
+  company: sql`${effective("company")}->>'value'`,
+  stage: sql`${effective("stage")}->>'value'`,
+};
+
+export async function countInquiries(ex: Executor, filter?: SQL) {
+  const [{ total }] = await ex.select({ total: count() }).from(candidates).where(and(inquiries, filter));
+  return total;
+}
+
+export async function listInquiriesPage(
+  { limit, offset, search }: PageWindow, key: keyof typeof INQUIRY_SORT_COLUMNS, direction: SortDirection, ex: Executor,
+): Promise<InquiriesPage> {
+  const inquiryEmails = normalizedEmails(sql`${effective("emails")}->'value'`);
+  const filter = substringFilter(search, [INQUIRY_SORT_COLUMNS.name, INQUIRY_SORT_COLUMNS.company], [inquiryEmails]);
+  const client = ex.select({ match: sql`jsonb_build_object('companyId', ${companies.id}, 'name', ${companies.name})` })
+    .from(contacts).innerJoin(companies, eq(contacts.companyId, companies.id))
+    .where(sql`${contacts.emails} && ${inquiryEmails}`).orderBy(companies.name, companies.id).limit(1);
+  const items = await ex.select({
+    id: candidates.id,
+    reviewState: sql<Inquiry["reviewState"]>`${candidates.reviewState}`,
+    fields: sql<Inquiry["fields"]>`jsonb_build_object(
+      'name', ${effective("name")}, 'company', ${effective("company")}, 'emails', ${effective("emails")},
+      'stage', ${effective("stage")}, 'department', ${effective("department")}, 'services', ${effective("services")},
+      'first_contact', ${effective("first_contact")}, 'last_contact', ${effective("last_contact")}
+    )`,
+    client: sql<Inquiry["client"]>`(${client})`,
+  }).from(candidates).where(and(inquiries, filter))
+    .orderBy(pageOrder(INQUIRY_SORT_COLUMNS[key], direction), candidates.id).limit(limit).offset(offset);
+  const all = await countInquiries(ex);
+  const total = filter ? await countInquiries(ex, filter) : all;
+  return { items, total, all };
+}
+
 export async function listLinkedCandidateRollups(ex: Executor) {
   const rollupFields = sql<CandidateFields>`jsonb_build_object(
     'stage', ${effective("stage")},

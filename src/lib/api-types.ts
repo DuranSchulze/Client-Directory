@@ -17,6 +17,15 @@ export type ContactItem = { id: number; companyId: number; name: string | null; 
 export type GmailRollup = { stage: Stage | null; lastContact: string | null; needsCheck: string[]; candidateIds: number[] };
 export type CompanyListItem = CompanyItem & { contacts: ContactItem[]; gmail: GmailRollup; probity: boolean };
 export type CandidateItem = { id: number; fields: CandidateFields };
+type InquiryField = "name" | "company" | "emails" | "stage" | "department" | "services" | "first_contact" | "last_contact";
+export type Inquiry = {
+  id: number;
+  reviewState: "pending" | "approved";
+  fields: {
+    [K in InquiryField]: { value: NonNullable<CandidateFields[K]>["value"] | null; source?: string; confidence?: number } | null;
+  };
+  client: { companyId: number; name: string } | null;
+};
 export type Activity = {
   candidates: CandidateItem[]; stage: Stage | null; stageDates: Partial<Record<Stage, string>>;
   summary: {
@@ -50,7 +59,7 @@ export type ScrapeStatus = { running: { startedAt: string; completed: number } |
 export type AttachAllResult = { attached: number; skipped: number; contacts: { id: number; companyId: number }[] };
 export type LastMasterUpload = { at: string; by: string; fileName: string };
 export type MasterUploadResponse = ItemResponse<{ lastMasterUpload: LastMasterUpload | null }>;
-export type Counts = { companies: number; probity: number; probityUnmatched: number; needsCompany: number; suppliers: number; deptEmails: number; lastMasterUpload: LastMasterUpload | null };
+export type Counts = { companies: number; probity: number; probityUnmatched: number; needsCompany: number; inquiries: number; suppliers: number; deptEmails: number; lastMasterUpload: LastMasterUpload | null };
 export type ApiError = { error: string; field?: string };
 export type ItemResponse<T> = { item: T };
 export type ListResponse<T> = { items: T[] };
@@ -61,6 +70,7 @@ export type CompaniesPage = ListPage<CompanyListItem> & {
   facets: { services: string[]; supervisors: string[] };
 };
 export type ProbityPage = ListPage<ProbityItem> & { matched: number };
+export type InquiriesPage = ListPage<Inquiry>;
 export type SuppliersPage = ListPage<SupplierItem>;
 export type DeptEmailsPage = ListPage<DeptEmailItem> & { departments: { department: string; count: number }[] };
 export type DeleteResponse = { ok: true };
