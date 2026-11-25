@@ -1,4 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { sql, type SQL } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { AppError } from "@/lib/errors";
 import { GET } from "@/app/api/scrape-status/route";
@@ -25,7 +27,43 @@ it("keeps the countdown anchored to the automatic scrape when a newer manual job
   } });
   const { sql } = new PgDialect().sqlToQuery(m.execute.mock.calls[0][0]);
   expect(sql).toMatch(/\(SELECT to_json\(max\("jobs"\."started_at"\)\) FROM "jobs"\s+WHERE "jobs"\."name" = 'scrape' AND "jobs"\."params"->>'auto' = 'true'\) AS "lastAutoStartedAt"/);
+  expect(sql).toMatch(/\(SELECT to_json\(max\("jobs"\."finished_at"\)\) FROM "jobs"\s+WHERE "jobs"\."name" = 'scrape' AND "jobs"\."status" IN \('done', 'done_with_errors'\)\) AS "lastFinishedAt"/);
   expect(m.requireRouteAccess).toHaveBeenCalledExactlyOnceWith("directory");
+});
+
+it.skipIf(!process.env.TEST_DATABASE_URL)("keeps the latest completed scrape when newer jobs fail or are not scrapes", async () => {
+  const testUrl = process.env.TEST_DATABASE_URL;
+  if (testUrl === process.env.DATABASE_URL) throw new Error("TEST_DATABASE_URL must differ from DATABASE_URL");
+  const [{ Pool, neonConfig }, { default: ws }] = await Promise.all([import("@neondatabase/serverless"), import("ws")]);
+  neonConfig.webSocketConstructor = ws;
+  const pool = new Pool({ connectionString: testUrl });
+  try {
+    await drizzle(pool).transaction(async (tx) => {
+      await tx.execute(sql`create temp table jobs (
+        id bigint, name text, status text, started_at timestamptz, finished_at timestamptz,
+        heartbeat_at timestamptz, params jsonb, progress jsonb
+      ) on commit drop`);
+      await tx.execute(sql`create temp table schedule (id integer, enabled boolean, interval_minutes integer) on commit drop`);
+      await tx.execute(sql`set local search_path = pg_temp`);
+      await tx.execute(sql`insert into jobs (id, name, status, finished_at) values
+        (1, 'scrape', 'done', '2026-11-24T05:06:00Z'),
+        (2, 'scrape', 'done_with_errors', '2026-11-24T06:06:00Z'),
+        (3, 'scrape', 'failed', '2026-11-24T07:06:00Z'),
+        (4, 'scrape', 'stopped', '2026-11-24T08:06:00Z'),
+        (5, 'scrape', 'interrupted', '2026-11-24T09:06:00Z'),
+        (6, 'extract', 'done', '2026-11-24T10:06:00Z')`);
+      m.execute.mockImplementation((query: SQL) => tx.execute(query));
+
+      const response = await GET();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ item: { ...empty, lastFinishedAt: "2026-11-24T06:06:00.000Z" } });
+
+      await tx.execute(sql`delete from jobs where id = 2`);
+      expect(await (await GET()).json()).toEqual({ item: { ...empty, lastFinishedAt: "2026-11-24T05:06:00.000Z" } });
+    });
+  } finally {
+    await pool.end();
+  }
 });
 
 it("excludes stale heartbeats before choosing the latest running or paused job", async () => {

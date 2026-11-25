@@ -20,7 +20,8 @@ export async function readScrapeStatus() {
     ) AS "running",
     (SELECT to_json(max(${jobs.startedAt})) FROM ${jobs}
       WHERE ${jobs.name} = 'scrape' AND ${jobs.params}->>'auto' = 'true') AS "lastAutoStartedAt",
-    (SELECT to_json(max(${jobs.finishedAt})) FROM ${jobs}) AS "lastFinishedAt",
+    (SELECT to_json(max(${jobs.finishedAt})) FROM ${jobs}
+      WHERE ${jobs.name} = 'scrape' AND ${jobs.status} IN ('done', 'done_with_errors')) AS "lastFinishedAt",
     (SELECT CASE WHEN ${schedule.enabled} THEN ${schedule.intervalMinutes} END
       FROM ${schedule} ORDER BY ${schedule.id} LIMIT 1) AS "intervalMinutes"
   `);
