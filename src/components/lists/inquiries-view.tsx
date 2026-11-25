@@ -19,9 +19,10 @@ export function contactInstant(value: string | null | undefined): string | null 
   const zoned = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?$/.test(value) ? `${value.replace(" ", "T")}${value.length === 10 ? "T00:00:00" : ""}Z` : value;
   const t = Date.parse(zoned);
   if (Number.isNaN(t)) return null;
-  const iso = new Date(t).toISOString();
-  // JavaScript rolls 2026-02-30 over to March 2; the server rejects it.
-  return zoned.endsWith("Z") && iso.slice(0, 10) !== value.slice(0, 10) ? null : iso;
+  // JavaScript rolls 2026-02-30 over to March 2; the server rejects it, with or without an offset.
+  const [y, m, d] = value.slice(0, 10).split("-").map(Number);
+  if (new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10) !== value.slice(0, 10)) return null;
+  return new Date(t).toISOString();
 }
 
 function LastContact({ value }: { value: string | null | undefined }) {
@@ -30,7 +31,7 @@ function LastContact({ value }: { value: string | null | undefined }) {
 }
 function ClientLink({ client }: { client: Inquiry["client"] }) {
   return client
-    ? <Link href={`/clients?id=${client.companyId}`} className="link-draw font-semibold text-primary-text">{client.name}</Link>
+    ? <Link href={`/clients?id=${client.companyId}`} className="link-draw font-semibold text-primary-text [overflow-wrap:anywhere]">{client.name}</Link>
     : <span className="text-muted-foreground">Not a client yet</span>;
 }
 
@@ -52,14 +53,14 @@ export function InquiriesView() {
       const emails = (i.fields.emails?.value ?? []).filter((e): e is string => typeof e === "string");
       return (
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="flex flex-wrap items-center gap-2 font-semibold">
+          <span className="flex flex-wrap items-center gap-2 font-semibold [overflow-wrap:anywhere]">
             {i.fields.name?.value ?? <span className="font-normal text-muted-foreground">No name</span>}
             {i.reviewState === "pending" && <Pill tone="warning" className="text-[11px]">Not reviewed</Pill>}
           </span>
           {emails.map((e) => <a key={e} href={`mailto:${e}`} className="link-draw w-fit break-all text-xs text-muted-foreground">{e}</a>)}
           {/* Phone width: the other columns stack here. */}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs md:hidden">
-            {i.fields.company?.value && <span>{i.fields.company.value}</span>}
+            {i.fields.company?.value && <span className="min-w-0 [overflow-wrap:anywhere]">{i.fields.company.value}</span>}
             {i.fields.stage?.value && <Pill tone="neutral" className="text-[11px]">{STAGE_LABEL[i.fields.stage.value]}</Pill>}
             <span className="text-muted-foreground">Last contact <LastContact value={i.fields.last_contact?.value} /></span>
             <ClientLink client={i.client} />
@@ -67,7 +68,7 @@ export function InquiriesView() {
         </div>
       );
     } },
-    { key: "company", header: "Company", desktopOnly: true, sortValue: (i) => i.fields.company?.value ?? "", render: (i) => i.fields.company?.value ?? DASH },
+    { key: "company", header: "Company", desktopOnly: true, sortValue: (i) => i.fields.company?.value ?? "", render: (i) => <span className="[overflow-wrap:anywhere]">{i.fields.company?.value ?? DASH}</span> },
     { key: "stage", header: "Stage", desktopOnly: true, sortValue: (i) => i.fields.stage?.value ?? "", render: (i) => i.fields.stage?.value ? <Pill tone="neutral">{STAGE_LABEL[i.fields.stage.value]}</Pill> : DASH },
     { key: "department", header: "Department", wideOnly: true, className: "text-muted-foreground", render: (i) => i.fields.department?.value ?? DASH },
     { key: "last_contact", header: "Last contact", desktopOnly: true, sortValue: (i) => i.fields.last_contact?.value ?? "", className: "whitespace-nowrap tabular-nums", render: (i) => <LastContact value={i.fields.last_contact?.value} /> },
