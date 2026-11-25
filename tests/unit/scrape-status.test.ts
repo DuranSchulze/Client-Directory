@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { sql, type SQL } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { AppError } from "@/lib/errors";
 import { GET } from "@/app/api/scrape-status/route";
@@ -34,8 +35,6 @@ it("keeps the countdown anchored to the automatic scrape when a newer manual job
 it.skipIf(!process.env.TEST_DATABASE_URL)("keeps the latest completed scrape when newer jobs fail or are not scrapes", async () => {
   const testUrl = process.env.TEST_DATABASE_URL;
   if (testUrl === process.env.DATABASE_URL) throw new Error("TEST_DATABASE_URL must differ from DATABASE_URL");
-  const [{ Pool, neonConfig }, { default: ws }] = await Promise.all([import("@neondatabase/serverless"), import("ws")]);
-  neonConfig.webSocketConstructor = ws;
   const pool = new Pool({ connectionString: testUrl });
   try {
     await drizzle(pool).transaction(async (tx) => {

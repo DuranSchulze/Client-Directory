@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { Pool } from "pg";
 import { describe, expect, it } from "vitest";
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)("legacy directory roles migration", () => {
   it("assigns Owner, enforces the FK, and preserves a later non-Owner assignment on rerun", async () => {
-    const { Pool, neonConfig } = await import("@neondatabase/serverless");
-    const { default: ws } = await import("ws");
     const { applyRoleMigration } = await import("../../scripts/migrate-roles");
-    neonConfig.webSocketConstructor = ws;
     const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
     try {
       const client = await pool.connect();

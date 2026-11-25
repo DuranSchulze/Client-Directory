@@ -1,8 +1,7 @@
 import "dotenv/config";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Pool, neonConfig, type PoolClient } from "@neondatabase/serverless";
-import ws from "ws";
+import { Pool, type PoolClient } from "pg";
 import { ROUTES } from "../src/lib/routes";
 
 export type MigrationState = { roles: boolean; owner: boolean; legacyRole: boolean; roleId: boolean; roleIdNotNull: boolean; foreignKey: boolean };
@@ -43,7 +42,6 @@ export async function applyRoleMigration(client: PoolClient): Promise<string[]> 
 export async function run(args = process.argv.slice(2)): Promise<number> {
   if (args.length > 1 || args.some((arg) => arg !== "--apply")) { console.error("Usage: migrate-roles.ts [--apply]"); return 1; }
   if (!process.env.DATABASE_URL) { console.error("Set DATABASE_URL to inspect the roles migration"); return 1; }
-  neonConfig.webSocketConstructor = ws;
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     const client = await pool.connect();

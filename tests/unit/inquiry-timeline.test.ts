@@ -1,4 +1,5 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import { beforeEach, expect, it, vi } from "vitest";
 import { AppError } from "@/lib/errors";
 
@@ -61,8 +62,6 @@ it.each([401, 403])("enforces directory access before querying (%s)", async (sta
 it.skipIf(!process.env.TEST_DATABASE_URL)("reads effective timelines only for eligible candidates in PostgreSQL", async () => {
   const testUrl = process.env.TEST_DATABASE_URL;
   if (testUrl === process.env.DATABASE_URL) throw new Error("TEST_DATABASE_URL must differ from DATABASE_URL");
-  const [{ Pool, neonConfig }, { default: ws }] = await Promise.all([import("@neondatabase/serverless"), import("ws")]);
-  neonConfig.webSocketConstructor = ws;
   const pool = new Pool({ connectionString: testUrl });
   try {
     const client = await pool.connect();

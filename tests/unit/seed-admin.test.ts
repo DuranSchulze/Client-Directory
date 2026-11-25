@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ transaction: vi.fn(), lock: vi.fn(), hasUsers: vi.fn(), owner: vi.fn(), insert: vi.fn(), hash: vi.fn() }));
-vi.mock("@/db", () => ({ withTransaction: m.transaction }));
+const m = vi.hoisted(() => ({ transaction: vi.fn(), close: vi.fn(), lock: vi.fn(), hasUsers: vi.fn(), owner: vi.fn(), insert: vi.fn(), hash: vi.fn() }));
+vi.mock("@/db", () => ({ withTransaction: m.transaction, closeDb: m.close }));
 vi.mock("@/repositories/users.repository", () => ({ hasUsers: m.hasUsers, insertAdmin: m.insert }));
 vi.mock("@/repositories/roles.repository", () => ({ ensureOwnerRole: m.owner, lockAccounts: m.lock }));
 vi.mock("bcryptjs", () => ({ hash: m.hash }));
@@ -11,6 +11,7 @@ beforeEach(() => {
   m.transaction.mockImplementation((fn) => fn(tx)); m.hasUsers.mockResolvedValue(false); m.owner.mockResolvedValue({ id: 3 }); m.hash.mockResolvedValue("private-hash");
 });
 afterEach(() => vi.unstubAllEnvs());
+afterEach(() => expect(m.close).toHaveBeenCalledTimes(1));
 it("locks, creates/finds Owner and seeds the normalized admin with bcrypt 12, silently", async () => {
   const output = vi.spyOn(console, "log");
   try {

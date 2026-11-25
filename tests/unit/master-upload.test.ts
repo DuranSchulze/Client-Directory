@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
 import type { Executor } from "@/db";
 import { AppError } from "@/lib/errors";
 const m = vi.hoisted(() => ({ grant: vi.fn(), session: vi.fn(), latest: vi.fn(), counts: vi.fn() }));

@@ -20,8 +20,8 @@ export async function findDeptEmail(emails: string[], ex: Executor = db) {
 }
 
 export async function tryDistributionLock(ex: Executor) {
-  // withTransaction closes its private pool on success or rollback, releasing this session lock.
-  const result = await ex.execute<{ acquired: boolean }>(sql`select pg_try_advisory_lock(7340022) as acquired`);
+  // Commit or rollback releases the guard before the shared pool reuses the connection.
+  const result = await ex.execute<{ acquired: boolean }>(sql`select pg_try_advisory_xact_lock(7340022) as acquired`);
   return result.rows[0]?.acquired === true;
 }
 export async function listSuppressions(ex: Executor = db) { return ex.select().from(distribution_suppressions_tb); }

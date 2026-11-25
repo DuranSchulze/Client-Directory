@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
 
 const { query } = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock("@/db", () => { const db = drizzle({ query } as never); return { db, withTransaction: (fn: (tx: unknown) => unknown) => fn(Object.assign(Object.create(db), { setTransaction: async () => {} })) }; });

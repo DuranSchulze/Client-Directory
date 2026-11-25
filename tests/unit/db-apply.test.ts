@@ -5,8 +5,7 @@ import { dirname, resolve } from "node:path";
 
 const mocks = vi.hoisted(() => ({ export: vi.fn(), query: vi.fn(), connect: vi.fn(), release: vi.fn(), end: vi.fn(), pool: vi.fn() }));
 vi.mock("node:child_process", () => ({ execFileSync: mocks.export }));
-vi.mock("@neondatabase/serverless", () => ({
-  neonConfig: {},
+vi.mock("pg", () => ({
   Pool: class {
     constructor(options: unknown) { mocks.pool(options); }
     connect = mocks.connect;

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ query: vi.fn(), connect: vi.fn(), release: vi.fn(), end: vi.fn() }));
-vi.mock("@neondatabase/serverless", () => ({ neonConfig: {}, Pool: class { connect = m.connect; end = m.end; } }));
+vi.mock("pg", () => ({ Pool: class { connect = m.connect; end = m.end; } }));
 import { planMigration, run, type MigrationState } from "../../scripts/migrate-roles";
 let state: MigrationState;
 const migrated: MigrationState = { roles: true, owner: true, legacyRole: false, roleId: true, roleIdNotNull: true, foreignKey: true };

@@ -1,22 +1,23 @@
 import "server-only";
-import { neon, neonConfig, Pool } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
-import { drizzle as websocketDrizzle } from "drizzle-orm/neon-serverless";
-import ws from "ws";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
-neonConfig.webSocketConstructor = ws;
 // Next collects route modules during builds without runtime credentials.
-const url = process.env.DATABASE_URL ?? (process.env.NEXT_PHASE === "phase-production-build" ? "postgresql://build:build@localhost/build" : "");
-export const db = drizzle(neon(url));
-type TransactionDb = ReturnType<typeof websocketDrizzle>;
-export type Tx = Parameters<Parameters<TransactionDb["transaction"]>[0]>[0];
+const url = process.env.DATABASE_URL || (process.env.NEXT_PHASE === "phase-production-build" ? "postgresql://build:build@localhost/build" : "");
+const pool = new Pool({ connectionString: url });
+pool.on("error", (error) => console.error("Idle database connection error", error.message));
+const database = drizzle(pool);
+// Route modules can be imported before any database operation.
+export const db = url ? database : new Proxy(database, {
+  get() { throw new Error("Set DATABASE_URL to connect to Postgres."); },
+});
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type Executor = typeof db | Tx;
 
 export async function withTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  try {
-    return await websocketDrizzle(pool).transaction(fn);
-  } finally {
-    await pool.end();
-  }
+  return db.transaction(fn);
+}
+
+export function closeDb(): Promise<void> {
+  return pool.end();
 }

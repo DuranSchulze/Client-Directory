@@ -1,4 +1,5 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
 import { AppError } from "@/lib/errors";
@@ -43,10 +44,7 @@ it("uses reviewed status for pending and approved inquiries and pages newest con
 it.skipIf(!process.env.TEST_DATABASE_URL)("filters reviewed status and orders actual timestamps across pages in PostgreSQL", async () => {
   const testUrl = process.env.TEST_DATABASE_URL;
   if (testUrl === process.env.DATABASE_URL) throw new Error("TEST_DATABASE_URL must differ from DATABASE_URL");
-  const [{ Pool, neonConfig }, { default: ws }, { countInquiries, listInquiriesPage }] = await Promise.all([
-    import("@neondatabase/serverless"), import("ws"), import("@/repositories/candidates.repository"),
-  ]);
-  neonConfig.webSocketConstructor = ws;
+  const { countInquiries, listInquiriesPage } = await import("@/repositories/candidates.repository");
   const pool = new Pool({ connectionString: testUrl });
   try {
     await drizzle(pool).transaction(async (tx) => {

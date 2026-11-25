@@ -1,12 +1,15 @@
 # Client Directory
 
-Admin directory that replaces the accounting Excel (`Clients Database.xlsx`). It owns the master list (`companies` + `contacts`) that the Scraper reads from the same Neon database to tag Gmail candidates. Build spec: [BUILD.md](BUILD.md). Visual reference: [mock/client-directory.html](mock/client-directory.html).
+Admin directory that replaces the accounting Excel (`Clients Database.xlsx`). It owns the master list (`companies` + `contacts`) that the Scraper reads from the same Postgres database to tag Gmail candidates. Build spec: [BUILD.md](BUILD.md). Visual reference: [mock/client-directory.html](mock/client-directory.html).
 
-Stack: Next.js 16 (App Router), React 19, TypeScript, Tailwind v4, shadcn `base-nova`, TanStack Query, Drizzle ORM on Neon Postgres (`neon-http`, plus a WebSocket pool for transactions).
+Stack: Next.js 16 (App Router), React 19, TypeScript, Tailwind v4, shadcn `base-nova`, TanStack Query, Drizzle ORM, and node-postgres.
 
 ## Setup
 
+The Scraper Docker stack runs Postgres 18 and publishes it at `127.0.0.1:5434`. Use `client_directory` for the app and a separate `client_directory_test` database with the same schema for tests.
+
 ```bash
+docker compose -f ../Scraper/docker-compose.yml up -d db
 npm install
 cp .env.example .env    # then fill in the values
 npm run db:seed         # creates the Owner admin from DIRECTORY_ADMIN_EMAIL / DIRECTORY_ADMIN_PASSWORD when no user exists
@@ -15,8 +18,9 @@ npm run dev             # http://127.0.0.1:3100
 
 | Variable | What it is |
 |---|---|
-| `DATABASE_URL` | Neon connection string. The same database as the Scraper. |
-| `TEST_DATABASE_URL` | A disposable Neon branch for `npm run test:int`. Must differ from `DATABASE_URL`. |
+| `DATABASE_URL` | Host connection to `127.0.0.1:5434/client_directory` for development and scripts. |
+| `CONTAINER_DATABASE_URL` | Connection to `host.docker.internal:5434/client_directory` for the Compose web container. |
+| `TEST_DATABASE_URL` | Host connection to the separate `127.0.0.1:5434/client_directory_test` database. |
 | `SESSION_SECRET` | 32+ random characters. Not the Scraper's `JWT_SECRET`; the two logins are separate. |
 | `ACCOUNT_NO_KEY` | 32 random bytes, base64. Encrypts bank account numbers (AES-256-GCM). Rotating it means re-encrypting. |
 | `DIRECTORY_ADMIN_EMAIL`, `DIRECTORY_ADMIN_PASSWORD` | The seeded admin. |
@@ -27,9 +31,9 @@ npm run dev             # http://127.0.0.1:3100
 
 The tool only bootstraps missing tables, indexes and constraints for the 10 directory tables in `public`. It rejects unsupported SQL and references to other tables or schemas before any write. The table allowlist is shared with `drizzle.config.ts`. Existing objects are matched by kind and owning table; existing tables must have the declared column names, types and nullability. Column drift fails with a request for a reviewed manual migration: the sole additive migration is nullable `contacts.source`; otherwise this tool does not migrate existing objects or reconcile index/constraint definitions.
 
-1. Point `DATABASE_URL` at a disposable Neon branch, inspect `npm run db:push`, then run `npm run db:apply` there.
-2. Restore the intended `DATABASE_URL`, set `TEST_DATABASE_URL` to the disposable branch (different from `DATABASE_URL`), and run `npm run test:int`.
-3. Take a restore-point branch, inspect the shared database dry run again, then apply.
+1. Set `DATABASE_URL` to the `TEST_DATABASE_URL` value for the schema CLI, inspect `npm run db:push`, then run `npm run db:apply` there.
+2. Restore the app database URL and run `npm run test:int` with `TEST_DATABASE_URL` set.
+3. Back up the shared database and inspect its dry run before applying.
 
 Never invoke `drizzle-kit push` directly on the shared database: its table filter does not protect Scraper sequences from proposed drops. The bootstrap accepts foreign-key `ON DELETE CASCADE` between directory tables; destructive `DROP ... CASCADE` is refused.
 
@@ -49,7 +53,7 @@ npm run db:migrate-roles -- --apply   # must report 0 statements; later role ass
 
 The migration touches only `directory_roles` and `directory_users`, on one connection in one transaction; an error rolls it back and closes the pool. `db:push` is a bootstrap and refuses the legacy column drift, so it cannot replace this migration. Neither the migration nor the bootstrap touches the Scraper's `users` or `roles` tables.
 
-Run the migration on the disposable `directory-test` branch first, then `npm run test:int` with that branch's `TEST_DATABASE_URL` different from `DATABASE_URL`. Confirm the accounts races and legacy migration test executed, not skipped. Integration tests temporarily isolate directory fixtures and must never target production. Nothing is deployed yet; after frontend review and user approval, take a Neon restore branch, inspect/apply the production migration, deploy the matching backend/frontend, and smoke-test login and Accounts. Recover from a committed migration by restoring that branch.
+Run the migration on `client_directory_test` first, then restore the app database URL and run `npm run test:int`. Confirm the account race and legacy migration tests ran. Back up the app database before applying the migration there, then smoke-test login and Accounts.
 
 ## Import
 
@@ -63,11 +67,12 @@ npm run lint
 npm test               # unit + import parser tests (synthetic workbooks, no real data)
 npm run test:int       # against TEST_DATABASE_URL only
 npm run build
+npx tsx --conditions=react-server scripts/smoke-db.ts
 ```
 
-## Deploy
+The smoke script checks the restored app database for 2,035 Scraper clients and reads the Directory companies table. It then verifies commit and rollback on `client_directory_test` and removes its test rows.
 
-**Vercel (staging):** import the repo, keep the default build, set the five variables above in the project settings (not `TEST_DATABASE_URL`), deploy. No `vercel.json` is needed.
+## Deploy
 
 **Docker:**
 
@@ -76,12 +81,12 @@ docker compose build
 docker compose up -d   # http://127.0.0.1:3100, reads .env at runtime
 ```
 
-The image is a Next standalone build (`BUILD_STANDALONE=1`) on `node:22-alpine`. Secrets are read at runtime only, never baked into the image. Behind Docker, put a reverse proxy in front that sets `X-Forwarded-For`, since the login rate limit keys on it.
+The image is a Next standalone build (`BUILD_STANDALONE=1`) on `node:22-alpine`. Compose sets the web container's `DATABASE_URL` from `CONTAINER_DATABASE_URL`. Secrets are read at runtime. Behind Docker, put a reverse proxy in front that sets `X-Forwarded-For`, since the login rate limit keys on it.
 
 ## Automatic contact distribution
 
 Automatic writes are off by default. After verifying the schema and integration tests on the dev DB, enable `AUTO_DISTRIBUTE=1`. Pending and approved Scraper candidates can become `cc` contacts when their valid corporate domains identify exactly one client using manual/import contacts. Free-mail domains and `INTERNAL_DOMAINS` (a comma-separated list) are excluded. Auto-added contacts never seed new matches. Scraper tables remain read-only.
 
-Docker runs distribution after each committed workbook upload and every `DISTRIBUTE_EVERY_MINUTES` (default 15, minimum 5). Vercel staging runs only the after-upload trigger. No timer runs in builds or tests. Both triggers use a nonblocking advisory lock; overlapping runs skip, while writes serialize with import and manual attachment under the email ownership lock. A failed after-upload run is logged without failing the committed import.
+Docker runs distribution after each committed workbook upload and every `DISTRIBUTE_EVERY_MINUTES` (default 15, minimum 5). No timer runs in builds or tests. Both triggers use a nonblocking advisory lock; overlapping runs skip, while writes serialize with import and manual attachment under the email ownership lock. A failed after-upload run is logged without failing the committed import.
 
 A later workbook may move an email from an auto-added contact to its workbook client or department mailbox. Preview `moves` lists `{ email, fromCompanyId, toCompanyId }` (null for a department; temporary negative client IDs identify new clients in preview); `changes.contacts.updated` counts affected source contacts, including those deleted when emptied. Manual/import-owned conflicts retain their existing behavior. Deleting an auto-added contact suppresses its emails from future automatic runs; manual Needs company attachment remains available. Contacts expose `source: "scraper"` for auto-added rows, otherwise null; CSV columns stay the same.

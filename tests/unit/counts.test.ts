@@ -1,4 +1,4 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { expect, it, vi } from "vitest";
 
 const query = vi.hoisted(() => vi.fn());

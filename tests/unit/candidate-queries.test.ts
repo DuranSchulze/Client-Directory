@@ -28,7 +28,7 @@ it("links pending and approved candidates, coalesces reviewed fields, caps reads
 });
 
 it("lists only pending and approved distributable candidates, preferring reviewed fields without a page cap", async () => {
-  const { drizzle } = await import("drizzle-orm/neon-serverless");
+  const { drizzle } = await import("drizzle-orm/node-postgres");
   const query = vi.fn().mockResolvedValue({ rows: [] });
   const { listDistributable } = await import("@/repositories/candidates.repository");
   await listDistributable(drizzle({ query } as never) as unknown as Executor);
@@ -38,7 +38,7 @@ it("lists only pending and approved distributable candidates, preferring reviewe
 });
 
 it("reads the whole Needs-company queue in one ordered, uncapped query with the unlinked rules", async () => {
-  const { drizzle } = await import("drizzle-orm/neon-serverless");
+  const { drizzle } = await import("drizzle-orm/node-postgres");
   const query = vi.fn().mockResolvedValue({ rows: [] });
   const { listNeedsQueue } = await import("@/repositories/candidates.repository");
   await listNeedsQueue(drizzle({ query } as never) as unknown as Executor);

@@ -3,8 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Pool, neonConfig, type PoolClient } from "@neondatabase/serverless";
-import ws from "ws";
+import { Pool, type PoolClient } from "pg";
 import { DIRECTORY_TABLES } from "../src/db/directory-tables";
 
 type Token = { raw: string; kind: "word" | "identifier" | "string" | "number" | "symbol" };
@@ -293,7 +292,6 @@ export async function run(args = process.argv.slice(2)): Promise<number> {
     const statements = parseStatements(exported);
     validateBatch(statements);
     if (!process.env.DATABASE_URL) throw new SchemaError("Set DATABASE_URL to inspect the schema.");
-    neonConfig.webSocketConstructor = ws;
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       const client = await pool.connect();
