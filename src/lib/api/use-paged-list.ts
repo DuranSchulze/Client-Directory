@@ -55,7 +55,9 @@ export function usePagedUrlState(defaultSort?: string) {
   const page = Math.max(1, Math.floor(Number(get("page"))) || 1);
   const size = SIZES.includes(Number(get("size"))) ? Number(get("size")) : 25;
   const sortParam = get("sort");
-  const sort: Sort = sortParam ? { key: sortParam.split(":")[0], dir: sortParam.endsWith(":desc") ? "desc" : "asc" } : null;
+  // The header shows the sort the server applies, the default included.
+  const effectiveSort = sortParam || defaultSort;
+  const sort: Sort = effectiveSort ? { key: effectiveSort.split(":")[0], dir: effectiveSort.endsWith(":desc") ? "desc" : "asc" } : null;
   const q = get("q");
   const [qInput, setQInput] = useState(q);
   useEffect(() => {
@@ -77,7 +79,11 @@ export function usePagedUrlState(defaultSort?: string) {
     params, page, size, sort, q, qInput, setQInput, get, set,
     clearSearch: () => { setQInput(""); set({ q: null, page: null }); },
     onPageChange: (p: number) => set({ page: p > 1 ? p : null }),
-    onSortChange: (s: Sort) => set({ sort: s ? `${s.key}:${s.dir}` : null, page: null }),
+    // Clearing the default column would land on the same order again, so it flips direction instead.
+    onSortChange: (s: Sort) => set({
+      sort: s ? `${s.key}:${s.dir}` : sort && defaultSort?.startsWith(`${sort.key}:`) ? `${sort.key}:${sort.dir === "desc" ? "asc" : "desc"}` : null,
+      page: null,
+    }),
     onSizeChange: (s: number) => set({ size: s === 25 ? null : s, page: null }),
   };
 }

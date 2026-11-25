@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { MessageSquareText, SearchX } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageShell } from "@/components/shared/page-shell";
@@ -14,7 +14,6 @@ import type { Inquiry } from "@/lib/api-types";
 import { ago, DASH } from "@/lib/format";
 
 export function InquiriesView() {
-  const router = useRouter();
   const url = usePagedUrlState("last_contact:desc");
   const { data, isPending, isPlaceholderData, error, refetch } = usePagedList(inquiriesPageQuery, url.params);
   const rows = data?.items ?? [];
@@ -38,19 +37,17 @@ export function InquiriesView() {
     { key: "last_contact", header: "Last contact", sortValue: (i) => i.fields.last_contact?.value ?? "", className: "whitespace-nowrap tabular-nums",
       render: (i) => i.fields.last_contact?.value ? <time dateTime={i.fields.last_contact.value} title={new Date(i.fields.last_contact.value).toLocaleString()}>{ago(i.fields.last_contact.value)}</time> : DASH },
     { key: "client", header: "Client", render: (i) => i.client
-      ? <span className="link-draw font-semibold text-primary-text">{i.client.name}</span>
+      ? <Link href={`/clients?id=${i.client.companyId}`} className="link-draw font-semibold text-primary-text">{i.client.name}</Link>
       : <span className="text-muted-foreground">Not a client yet</span> },
   ];
 
   return (
     <PageShell>
-      <PageHeader title="Inquiries" description="Everyone the Scraper marked as an inquiry, newest contact first. Rows with a client open that client." />
+      <PageHeader title="Inquiries" description="Everyone the Scraper marked as an inquiry, newest contact first. A client name opens that client." />
       <DataTableCard title="Inquiries" rows={rows} columns={columns} getRowId={(i) => i.id} itemLabel="inquiries"
         loading={isPending} refetching={isPlaceholderData} error={error ? errorMessage(error) : null} onRetry={() => refetch()}
         paged={{ total: data?.total ?? 0, all: data?.all ?? 0, settled: !!data && !isPlaceholderData }}
         sort={url.sort} onSortChange={url.onSortChange} page={url.page} onPageChange={url.onPageChange} size={url.size} onSizeChange={url.onSizeChange}
-        onRowClick={(i) => { if (i.client) router.push(`/clients?id=${i.client.companyId}`); }}
-        rowLabel={(i) => i.client ? `Open ${i.client.name}` : `${i.fields.name?.value ?? "Inquiry"}, not a client yet`}
         search={<TableSearch value={url.qInput} onChange={url.setQInput} placeholder="Search name, company or email" />}
         empty={url.q ? <EmptyState icon={SearchX} title="No inquiries match this search." actionLabel="Clear search" onAction={url.clearSearch} />
           : <EmptyState icon={MessageSquareText} title="No inquiries yet." description="They appear once the Scraper marks a contact as an inquiry." />} />
