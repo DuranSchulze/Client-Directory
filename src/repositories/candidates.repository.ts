@@ -36,8 +36,13 @@ const effective = (key: keyof CandidateFields) => {
 
 const inquiryStates = ["pending", "approved"] satisfies Inquiry["reviewState"][];
 const inquiries = and(inArray(candidates.reviewState, inquiryStates), eq(sql`${effective("status")}->>'value'`, "inquiry"));
+const lastContact = sql`(${effective("last_contact")}->>'value')`;
+// Scraper dates and timestamps without an offset are treated as UTC.
+const lastContactWithZone = sql`(case when ${lastContact} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}(:[0-9]{2}([.][0-9]+)?)?)?$'
+  then ${lastContact} || ' UTC' else ${lastContact} end)`;
 export const INQUIRY_SORT_COLUMNS = {
-  last_contact: sql`${effective("last_contact")}->>'value'`,
+  last_contact: sql`case when ${lastContact} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    and pg_input_is_valid(${lastContactWithZone}, 'timestamp with time zone') then ${lastContactWithZone}::timestamptz end`,
   name: sql`${effective("name")}->>'value'`,
   company: sql`${effective("company")}->>'value'`,
   stage: sql`${effective("stage")}->>'value'`,
