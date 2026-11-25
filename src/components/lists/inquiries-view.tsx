@@ -7,6 +7,7 @@ import { Mail, MessageSquareText, SearchX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Conversations } from "@/components/shared/conversations";
+import { ScrapeRefresh } from "./scrape-bar";
 import { ErrorState, PlaceholderRows } from "@/components/shared/loadable";
 import { PageHeader } from "@/components/shared/page-header";
 import { LastUpdatedNote } from "@/components/shared/last-updated-note";
@@ -102,6 +103,7 @@ export function InquiriesView() {
         </>}
         empty={url.q ? <EmptyState icon={SearchX} title="No inquiries match this search." actionLabel="Clear search" onAction={url.clearSearch} />
           : <EmptyState icon={MessageSquareText} title="No inquiries yet." description="They appear once the Scraper marks a contact as an inquiry." />} />
+      <ScrapeRefresh />
       <InboxSheet inquiry={open} onClose={() => setOpen(null)} />
     </PageShell>
   );

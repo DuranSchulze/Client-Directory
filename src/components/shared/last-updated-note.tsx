@@ -1,11 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock } from "lucide-react";
 import { countsQuery, scrapeStatusQuery } from "@/lib/api/queries";
 
-function since(at: string) {
-  const min = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 60_000));
+function since(at: string, now: number) {
+  const min = Math.max(0, Math.round((now - Date.parse(at)) / 60_000));
   if (min < 1) return "just now";
   if (min < 60) return `${min} min ago`;
   const h = Math.round(min / 60);
@@ -16,6 +17,12 @@ function since(at: string) {
 export function LastUpdatedNote({ source }: { source: "excel" | "scraper" }) {
   const counts = useQuery({ ...countsQuery, enabled: source === "excel" });
   const scrape = useQuery({ ...scrapeStatusQuery, enabled: source === "scraper" });
+  // Re-render each minute so "5 min ago" keeps counting on an idle page.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const loaded = source === "excel" ? counts.data !== undefined : scrape.data !== undefined;
   if (!loaded) return null;
   const at = source === "excel" ? counts.data?.lastMasterUpload?.at ?? null : scrape.data?.lastFinishedAt ?? null;
@@ -26,7 +33,7 @@ export function LastUpdatedNote({ source }: { source: "excel" | "scraper" }) {
       <span className="min-w-0 break-words">
         {!at ? (source === "excel" ? "Not updated yet: no Excel uploaded" : "Not updated yet: no scrape has finished")
           : <>Last updated {source === "excel" ? "from the Excel upload" : "by the Scraper"}{" "}
-            <time dateTime={at} title={new Date(at).toLocaleString()} className="font-semibold text-foreground">{since(at)}</time>
+            <time dateTime={at} title={new Date(at).toLocaleString()} className="font-semibold text-foreground">{since(at, now)}</time>
             {by && <> by {by}</>}</>}
       </span>
     </span>

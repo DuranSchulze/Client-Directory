@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, RefreshCw } from "lucide-react";
 import { keys, scrapeStatusQuery } from "@/lib/api/queries";
+import type { ScrapeStatus } from "@/lib/api-types";
 
 const DUE_SOON_MS = 5 * 60_000;
 
@@ -18,26 +19,15 @@ function span(ms: number) {
 /** Linear Scraper status: a sweep while a scrape runs, a filling bar in the 5 minutes before the next one, else when it last ran. */
 export function ScrapeBar() {
   const { data } = useQuery(scrapeStatusQuery);
-  const qc = useQueryClient();
   const [now, setNow] = useState(() => Date.now());
-  const seen = useRef<{ running: boolean; finished: string | null } | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // A finished run may have added contacts: refresh the queue and the badge once, also when a whole run fell between two polls.
+  useScrapeRefresh(data);
   const running = data?.running ?? null;
-  const finished = data?.lastFinishedAt ?? null;
-  useEffect(() => {
-    if (!data) return;
-    const prev = seen.current;
-    seen.current = { running: !!running, finished };
-    if (prev && ((prev.running && !running) || (finished !== null && finished !== prev.finished))) {
-      [keys.needsCompany, keys.counts].forEach((queryKey) => qc.invalidateQueries({ queryKey }));
-    }
-  }, [data, running, finished, qc]);
 
   if (!data) return null;
   const nextIn = data.nextAt ? Date.parse(data.nextAt) - now : null;
@@ -63,4 +53,27 @@ export function ScrapeBar() {
       )}
     </div>
   );
+}
+
+/** A finished run may have added contacts: refresh the lists and the badge once, also when a whole run fell between two polls. */
+function useScrapeRefresh(data: ScrapeStatus | undefined) {
+  const qc = useQueryClient();
+  const seen = useRef<{ running: boolean; finished: string | null } | null>(null);
+  const running = data?.running ?? null;
+  const finished = data?.lastFinishedAt ?? null;
+  useEffect(() => {
+    if (!data) return;
+    const prev = seen.current;
+    seen.current = { running: !!running, finished };
+    if (prev && ((prev.running && !running) || (finished !== null && finished !== prev.finished))) {
+      [keys.needsCompany, keys.counts, keys.inquiries].forEach((queryKey) => qc.invalidateQueries({ queryKey }));
+    }
+  }, [data, running, finished, qc]);
+}
+
+/** The refresh alone, for pages that show no bar (Inquiries). */
+export function ScrapeRefresh() {
+  const { data } = useQuery(scrapeStatusQuery);
+  useScrapeRefresh(data);
+  return null;
 }
