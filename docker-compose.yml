@@ -6,4 +6,4 @@ services:
       # .env's DATABASE_URL (localhost:5434) is for host runs; the container reaches the Scraper's db via the host.
       DATABASE_URL: ${CONTAINER_DATABASE_URL:?set CONTAINER_DATABASE_URL in .env}
     ports:
-      - "127.0.0.1:3100:3100"
+      - "3100:3100"
