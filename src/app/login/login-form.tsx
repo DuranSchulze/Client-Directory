@@ -10,7 +10,7 @@ import type { RouteKey } from "@/lib/routes";
 import { homeFor, routeFor } from "@/lib/access";
 
 /** Only same-origin paths the account's role can open are followed after sign-in; anything else goes to its home. */
-function safeNext(v: string | null, routes: RouteKey[]) {
+export function safeNext(v: string | null, routes: RouteKey[]) {
   const home = homeFor(routes);
   if (!v || !v.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(v)) return home;
   try {
@@ -36,7 +36,7 @@ export function LoginForm() {
     try {
       const { item } = await request<AuthResponse>("/api/auth/login", { json: { email, password } });
       try { new BroadcastChannel("directory-session").postMessage("in"); } catch { /* unsupported */ }
-      window.location.href = item.mustChangePassword ? "/change-password" : safeNext(requested, item.routes);
+      window.location.href = item.mustChangePassword ? `/change-password${requested ? `?next=${encodeURIComponent(requested)}` : ""}` : safeNext(requested, item.routes);
     } catch (err) {
       setError(err instanceof ApiError && err.status === 429 ? "Too many attempts. Wait 15 minutes, then try again."
         : err instanceof ApiError && err.status === 401 ? "Email or password is wrong."

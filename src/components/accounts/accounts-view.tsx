@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Field } from "@/components/shared/field";
 import { Pill } from "@/components/shared/pills";
-import { errorMessage, request } from "@/lib/api/http";
+import { ApiError, errorMessage, request } from "@/lib/api/http";
 import { keys, meQuery, rolesQuery, usersQuery } from "@/lib/api/queries";
 import { useMutate } from "@/lib/api/use-mutate";
 import type { Account, AccountInput, AccountResponse, CreatedAccountResponse, Role, RoleInput, RoleResponse, TemporaryPassword } from "@/lib/api-types";
@@ -40,12 +40,13 @@ export function AccountsView() {
   const { data: me } = useQuery(meQuery);
   const [open, setOpen] = useState(false);
   const [resetting, setResetting] = useState<Account | null>(null);
-  // The one place a temporary password is shown; the API never returns it again.
-  const [issued, setIssued] = useState<{ email: string; password: string; reset: boolean } | null>(null);
-  const reset = useMutate<Account, TemporaryPassword & { email: string }>({
-    fn: (u) => request<TemporaryPassword>(`/api/users/${u.id}/reset-password`, { method: "POST" }).then((r) => ({ ...r, email: u.email })),
+  // Only this state holds a temporary password; mutations return metadata, so nothing secret lingers in the query cache.
+  const [issued, setIssued] = useState<Issued | null>(null);
+  const reset = useMutate<Account, null>({
+    fn: (u) => request<TemporaryPassword>(`/api/users/${u.id}/reset-password`, { method: "POST" })
+      .then((r) => { setIssued({ email: u.email, password: r.temporaryPassword, kind: "reset" }); return null; }),
     invalidate: ACCOUNT_KEYS,
-    onDone: (r) => { setResetting(null); setIssued({ email: r.email, password: r.temporaryPassword, reset: true }); },
+    onDone: () => setResetting(null),
     onFail: (e) => { toast.error(`Could not reset the password: ${errorMessage(e)}`); return true; },
   });
 
@@ -54,8 +55,11 @@ export function AccountsView() {
     { key: "email", header: "Email", desktopOnly: true, sortValue: (u) => u.email, className: "break-all", render: (u) => u.email },
     { key: "role", header: "Role", sortValue: (u) => u.role.name, className: "w-40 md:w-56", render: (u) => <RoleSelect account={u} roles={roles} /> },
     { key: "created", header: "Created", desktopOnly: true, sortValue: (u) => u.createdAt, className: "whitespace-nowrap text-muted-foreground tabular-nums", render: (u) => stamp(u.createdAt) },
-    { key: "actions", header: "Password", className: "w-24", render: (u) => u.id === me?.id ? null : (
-      <Button size="sm" variant="ghost" aria-label={`Reset password for ${u.name}`} onClick={() => setResetting(u)}><KeyRound />Reset</Button>
+    { key: "actions", header: "Password", className: "w-60", render: (u) => u.id === me?.id ? null : (
+      <div className="flex flex-wrap items-center gap-1 md:flex-nowrap">
+        {u.hasTemporaryPassword && <ShowTemporaryButton account={u} onShow={setIssued} />}
+        <Button size="sm" variant="ghost" aria-label={`Reset password for ${u.name}`} onClick={() => setResetting(u)}><KeyRound />Reset</Button>
+      </div>
     ) },
   ];
 
@@ -68,7 +72,7 @@ export function AccountsView() {
         empty={<EmptyState icon={UsersRound} title="No accounts yet." actionLabel="New account" onAction={() => setOpen(true)} />} />
       <RolesSection roles={roles} />
       {/* Remounted per open so the draft always starts empty. */}
-      {open && roles && <NewAccountDialog roles={roles} onClose={() => setOpen(false)} onCreated={(u) => setIssued({ email: u.email, password: u.temporaryPassword, reset: false })} />}
+      {open && roles && <NewAccountDialog roles={roles} onClose={() => setOpen(false)} onCreated={setIssued} />}
       <ConfirmDialog open={!!resetting} onOpenChange={(o) => !o && !reset.isPending && setResetting(null)} pending={reset.isPending} pendingLabel="Resetting…" destructive
         title={`Reset ${resetting?.name ?? ""}'s password?`} confirmLabel="Reset password"
         description="Their current password stops working and every device they use is signed out. You get a new temporary password to send them."
@@ -210,17 +214,18 @@ function RoleDialog({ role, onClose }: { role: Role | null; onClose: () => void 
   );
 }
 
-function NewAccountDialog({ roles, onClose, onCreated }: { roles: Role[]; onClose: () => void; onCreated: (u: CreatedAccountResponse["item"]) => void }) {
+function NewAccountDialog({ roles, onClose, onCreated }: { roles: Role[]; onClose: () => void; onCreated: (issued: Issued) => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   // Default to the first unlocked role, so a new account is never an Owner by accident.
   const [roleId, setRoleId] = useState(String((roles.find((r) => !r.locked) ?? roles[0])?.id ?? ""));
   const [error, setError] = useState("");
   const role = roles.find((r) => String(r.id) === roleId);
-  const create = useMutate<AccountInput, CreatedAccountResponse["item"]>({
-    fn: (body) => request<CreatedAccountResponse>("/api/users", { json: body }).then((r) => r.item),
+  const create = useMutate<AccountInput, null>({
+    fn: (body) => request<CreatedAccountResponse>("/api/users", { json: body })
+      .then(({ item }) => { onCreated({ email: item.email, password: item.temporaryPassword, kind: "created" }); return null; }),
     invalidate: ACCOUNT_KEYS,
-    onDone: (u) => { onClose(); onCreated(u); },
+    onDone: onClose,
     onFail: (e) => { setError(errorMessage(e)); return true; },
   });
   const valid = name.trim() && email.trim() && roleId;
@@ -256,8 +261,25 @@ function NewAccountDialog({ roles, onClose, onCreated }: { roles: Role[]; onClos
   );
 }
 
-/** Shown once after create or reset; closing it drops the password from memory. */
-function TemporaryPasswordDialog({ email, password, reset, onClose }: { email: string; password: string; reset: boolean; onClose: () => void }) {
+type Issued = { email: string; password: string; kind: "created" | "reset" | "stored" };
+
+/** Fetches a waiting account's temporary password on demand; it stays retrievable until they set their own. */
+function ShowTemporaryButton({ account, onShow }: { account: Account; onShow: (issued: Issued) => void }) {
+  const [pending, setPending] = useState(false);
+  async function show() {
+    setPending(true);
+    try {
+      const r = await request<TemporaryPassword>(`/api/users/${account.id}/temporary-password`);
+      onShow({ email: account.email, password: r.temporaryPassword, kind: "stored" });
+    } catch (e) {
+      toast.error(e instanceof ApiError && e.status === 404 ? `${account.name}'s temporary password is no longer available. Use Reset to make a new one.` : errorMessage(e));
+    } finally { setPending(false); }
+  }
+  return <Button size="sm" variant="ghost" aria-label={`Show temporary password for ${account.name}`} disabled={pending} onClick={show}><Copy />Temporary</Button>;
+}
+
+/** Shows a temporary password with a copy button; it can be shown again from the row until the person sets their own. */
+function TemporaryPasswordDialog({ email, password, kind, onClose }: Issued & { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try { await navigator.clipboard.writeText(password); setCopied(true); }
@@ -267,9 +289,9 @@ function TemporaryPasswordDialog({ email, password, reset, onClose }: { email: s
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{reset ? "Password reset" : "Account created"}</DialogTitle>
+          <DialogTitle>{kind === "reset" ? "Password reset" : kind === "created" ? "Account created" : "Temporary password"}</DialogTitle>
           <DialogDescription>
-            Send this temporary password to {email} over a private channel. It is shown only now. They must set their own password at sign-in.
+            Send this to {email} privately. They sign in with it once, then choose their own password. Until then, you can open it again from the Temporary button on their row.
           </DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2 rounded-lg bg-sunk p-2 pl-3">

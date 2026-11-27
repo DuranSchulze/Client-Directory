@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { requireVerifiedUser } from "@/lib/auth/guard";
 import { Building2, FileSpreadsheet, Inbox, ShieldCheck } from "lucide-react";
 import { LoginForm } from "./login-form";
 
@@ -10,7 +12,13 @@ const POINTS = [
   { icon: ShieldCheck, title: "Bank numbers stay masked", text: "Every reveal is logged with who and when." },
 ];
 
-export default function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  // A signed-in account still on a temporary password can't sign in again until it sets one.
+  const user = await requireVerifiedUser().catch(() => null);
+  if (user?.mustChangePassword) {
+    const { next } = await searchParams;
+    redirect(next ? `/change-password?next=${encodeURIComponent(next)}` : "/change-password");
+  }
   return (
     <main className="grid min-h-screen lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
       <section className="relative flex flex-col justify-between gap-10 overflow-hidden bg-sidebar p-6 text-sidebar-foreground sm:p-10 lg:p-14">

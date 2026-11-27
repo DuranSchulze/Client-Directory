@@ -206,7 +206,7 @@ function RouteGate({ children }: { children: React.ReactNode }) {
   useEffect(() => { void qc.invalidateQueries({ queryKey: keys.me }); }, [qc, pathname]);
   // A temporary password unlocks nothing but the change page; the API answers 403 to everything else.
   const forced = !!me?.mustChangePassword;
-  useEffect(() => { if (forced) window.location.replace("/change-password"); }, [forced]);
+  useEffect(() => { if (forced) window.location.replace(`/change-password?next=${encodeURIComponent(window.location.pathname + window.location.search)}`); }, [forced]);
   if (forced) return null;
   const route = routeFor(pathname);
   if (!route) return children;
