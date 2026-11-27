@@ -42,6 +42,8 @@ export function AccountsView() {
   const [resetting, setResetting] = useState<Account | null>(null);
   // Only this state holds a temporary password; mutations return metadata, so nothing secret lingers in the query cache.
   const [issued, setIssued] = useState<Issued | null>(null);
+  // One reveal at a time, so a slow response can't replace the password the admin just copied.
+  const [revealing, setRevealing] = useState(false);
   const reset = useMutate<Account, null>({
     fn: (u) => request<TemporaryPassword>(`/api/users/${u.id}/reset-password`, { method: "POST" })
       .then((r) => { setIssued({ email: u.email, password: r.temporaryPassword, kind: "reset" }); return null; }),
@@ -57,7 +59,7 @@ export function AccountsView() {
     { key: "created", header: "Created", desktopOnly: true, sortValue: (u) => u.createdAt, className: "whitespace-nowrap text-muted-foreground tabular-nums", render: (u) => stamp(u.createdAt) },
     { key: "actions", header: "Password", className: "w-60", render: (u) => u.id === me?.id ? null : (
       <div className="flex flex-wrap items-center gap-1 md:flex-nowrap">
-        {u.hasTemporaryPassword && <ShowTemporaryButton account={u} onShow={setIssued} />}
+        {u.hasTemporaryPassword && <ShowTemporaryButton account={u} onShow={setIssued} busy={revealing} setBusy={setRevealing} />}
         <Button size="sm" variant="ghost" aria-label={`Reset password for ${u.name}`} onClick={() => setResetting(u)}><KeyRound />Reset</Button>
       </div>
     ) },
@@ -77,7 +79,7 @@ export function AccountsView() {
         title={`Reset ${resetting?.name ?? ""}'s password?`} confirmLabel="Reset password"
         description="Their current password stops working and every device they use is signed out. You get a new temporary password to send them."
         onConfirm={() => resetting && reset.mutate(resetting)} />
-      {issued && <TemporaryPasswordDialog {...issued} onClose={() => setIssued(null)} />}
+      {issued && <TemporaryPasswordDialog key={`${issued.email}:${issued.password}`} {...issued} onClose={() => setIssued(null)} />}
     </PageShell>
   );
 }
@@ -264,18 +266,17 @@ function NewAccountDialog({ roles, onClose, onCreated }: { roles: Role[]; onClos
 type Issued = { email: string; password: string; kind: "created" | "reset" | "stored" };
 
 /** Fetches a waiting account's temporary password on demand; it stays retrievable until they set their own. */
-function ShowTemporaryButton({ account, onShow }: { account: Account; onShow: (issued: Issued) => void }) {
-  const [pending, setPending] = useState(false);
+function ShowTemporaryButton({ account, onShow, busy, setBusy }: { account: Account; onShow: (issued: Issued) => void; busy: boolean; setBusy: (b: boolean) => void }) {
   async function show() {
-    setPending(true);
+    setBusy(true);
     try {
       const r = await request<TemporaryPassword>(`/api/users/${account.id}/temporary-password`);
       onShow({ email: account.email, password: r.temporaryPassword, kind: "stored" });
     } catch (e) {
       toast.error(e instanceof ApiError && e.status === 404 ? `${account.name}'s temporary password is no longer available. Use Reset to make a new one.` : errorMessage(e));
-    } finally { setPending(false); }
+    } finally { setBusy(false); }
   }
-  return <Button size="sm" variant="ghost" aria-label={`Show temporary password for ${account.name}`} disabled={pending} onClick={show}><Copy />Temporary</Button>;
+  return <Button size="sm" variant="ghost" aria-label={`Show temporary password for ${account.name}`} disabled={busy} onClick={show}><Copy />Temporary</Button>;
 }
 
 /** Shows a temporary password with a copy button; it can be shown again from the row until the person sets their own. */

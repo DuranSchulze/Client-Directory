@@ -9,15 +9,15 @@ import type { AuthResponse } from "@/lib/api-types";
 import type { RouteKey } from "@/lib/routes";
 import { homeFor, routeFor } from "@/lib/access";
 
-/** Only same-origin paths the account's role can open are followed after sign-in; anything else goes to its home. */
+/** Only same-origin app pages the account's role can open are followed; auth pages, API paths and anything unknown go to its home. */
 export function safeNext(v: string | null, routes: RouteKey[]) {
   const home = homeFor(routes);
   if (!v || !v.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(v)) return home;
   try {
     const url = new URL(v, window.location.origin);
-    if (url.origin !== window.location.origin || url.pathname.startsWith("/login")) return home;
+    if (url.origin !== window.location.origin || /^\/(?:login|change-password|api)(?:\/|$)/.test(url.pathname)) return home;
     const need = routeFor(url.pathname);
-    return need && !routes.includes(need) ? home : url.href;
+    return need && routes.includes(need) ? url.href : home;
   } catch { return home; }
 }
 
