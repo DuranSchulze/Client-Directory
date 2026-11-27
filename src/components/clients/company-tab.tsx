@@ -15,7 +15,7 @@ import { Section } from "./client-sheet";
 import { STAGE_LABEL } from "@/components/shared/pills";
 import { toast } from "sonner";
 import { money } from "@/lib/format";
-import { paymentTotals, revealSecondsLeft } from "@/lib/ui-helpers";
+import { currencyTotals, isConfirmedPayment, paymentTotals, revealSecondsLeft } from "@/lib/ui-helpers";
 
 const toDraft = (c: CompanyItem): CompanyDraft => {
   const d: Record<string, unknown> = {};
@@ -88,15 +88,22 @@ export function CompanyTab({ detail, onDirty, onOpenContacts, onOpenActivity }: 
 
   const probity = detail.probity[0];
   const payments = detail.activity.payments;
-  const totals = paymentTotals(payments);
+  const confirmedTotals = paymentTotals(payments.filter(isConfirmedPayment));
+  const invoicedTotals = currencyTotals(detail.activity.amounts.filter((x) => x.stage === "invoiced"));
   const lastPaid = payments.reduce<string | null>((m, p) => (p.date && (!m || p.date > m) ? p.date : m), null);
   return (
     <div>
       <Section title="Payments" action={<Button variant="link" size="sm" onClick={onOpenActivity}>See activity</Button>}>
-        {payments.length === 0 ? <p className="text-sm text-muted-foreground">No verified payments yet.</p> : (
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Total paid</dt>
-              <dd className="mt-1 flex flex-col font-bold tabular-nums">{totals.map((t) => <span key={t.currency ?? "unknown"}>{money({ amount: t.amount, currency: t.currency })}</span>)}</dd></div>
+        {payments.length === 0 && invoicedTotals.length === 0 ? <p className="text-sm text-muted-foreground">No verified payments yet.</p> : (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+            <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Confirmed paid</dt>
+              <dd className="mt-1 flex flex-col font-bold text-success tabular-nums">
+                {confirmedTotals.length ? confirmedTotals.map((t) => <span key={t.currency ?? "unknown"}>{money({ amount: t.amount, currency: t.currency })}</span>) : <span className="text-foreground">{DASH}</span>}
+              </dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Total invoiced</dt>
+              <dd className="mt-1 flex flex-col font-bold tabular-nums">
+                {invoicedTotals.length ? invoicedTotals.map((t) => <span key={t.currency ?? "unknown"}>{money({ amount: t.amount, currency: t.currency })}</span>) : DASH}
+              </dd></div>
             <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Payments</dt><dd className="mt-1 font-semibold tabular-nums">{payments.length}</dd></div>
             <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Last payment</dt><dd className="mt-1 tabular-nums">{day(lastPaid)}</dd></div>
             <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Stage</dt><dd className="mt-1">{detail.activity.stage ? STAGE_LABEL[detail.activity.stage] : DASH}</dd></div>

@@ -1,15 +1,21 @@
 import type { Payment } from "./candidate-types";
 
-/** Payment totals kept per currency: amounts in different currencies are never added together. Unknown currency stays its own bucket. */
-export function paymentTotals(payments: Payment[]): { currency: string | null; amount: number }[] {
+/** Totals kept per currency: amounts in different currencies are never added together. Unknown currency stays its own bucket. */
+export function currencyTotals(items: { amount: number | null; currency: string | null }[]): { currency: string | null; amount: number }[] {
   const totals = new Map<string | null, number>();
-  for (const p of payments) {
-    if (p.amount === null) continue;
-    const key = p.currency?.trim().toUpperCase() || null;
-    totals.set(key, (totals.get(key) ?? 0) + p.amount);
+  for (const item of items) {
+    if (item.amount === null) continue;
+    const key = item.currency?.trim().toUpperCase() || null;
+    totals.set(key, (totals.get(key) ?? 0) + item.amount);
   }
   return [...totals].map(([currency, amount]) => ({ currency, amount }));
 }
+
+export function paymentTotals(payments: Payment[]): { currency: string | null; amount: number }[] {
+  return currencyTotals(payments);
+}
+
+export const isConfirmedPayment = (p: Pick<Payment, "basis">) => p.basis === "stated" || p.basis === "manual";
 
 /** Enter/Space opens a row only when the row itself has focus; a nested button or link keeps its own keyboard action. */
 export const rowKeyActivates = (e: { key: string; target: unknown; currentTarget: unknown }) =>

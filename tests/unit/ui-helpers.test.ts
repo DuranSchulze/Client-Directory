@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paymentTotals, revealSecondsLeft, rowKeyActivates } from "@/lib/ui-helpers";
+import { currencyTotals, isConfirmedPayment, paymentTotals, revealSecondsLeft, rowKeyActivates } from "@/lib/ui-helpers";
 
 describe("rowKeyActivates", () => {
   it("opens a focused row but leaves Enter/Space on nested buttons and links alone", () => {
@@ -14,6 +14,7 @@ describe("rowKeyActivates", () => {
 import { diffDraft } from "@/components/clients/company-form";
 import { validateCompanyDraft } from "@/components/clients/company-fields";
 import type { CompanyValues } from "@/lib/api-types";
+import type { Payment } from "@/lib/candidate-types";
 
 describe("paymentTotals", () => {
   it("never adds different currencies together and keeps unknown currency apart", () => {
@@ -25,6 +26,23 @@ describe("paymentTotals", () => {
       { date: null, amount: null, currency: "PHP", basis: "unknown", raw_item_id: 5 },
     ]);
     expect(totals).toEqual([{ currency: "PHP", amount: 150 }, { currency: "USD", amount: 100 }, { currency: null, amount: 7 }]);
+  });
+
+  it("totals confirmed payments and invoiced amounts separately per currency", () => {
+    const payments: Payment[] = [
+      { date: null, amount: 100, currency: "PHP", basis: "stated", raw_item_id: 1 },
+      { date: null, amount: 50, currency: "PHP", basis: "invoice", raw_item_id: 2 },
+      { date: null, amount: 25, currency: "PHP", basis: "manual", raw_item_id: 3 },
+    ];
+    const confirmed = paymentTotals(payments.filter(isConfirmedPayment));
+    expect(confirmed).toEqual([{ currency: "PHP", amount: 125 }]);
+
+    const invoiced = currencyTotals([
+      { stage: "quoted" as const, amount: 500, currency: "PHP", date: null, raw_item_id: 1 },
+      { stage: "invoiced" as const, amount: 300, currency: "PHP", date: null, raw_item_id: 2 },
+      { stage: "invoiced" as const, amount: 200, currency: "php", date: null, raw_item_id: 3 },
+    ].filter((x) => x.stage === "invoiced"));
+    expect(invoiced).toEqual([{ currency: "PHP", amount: 500 }]);
   });
 });
 

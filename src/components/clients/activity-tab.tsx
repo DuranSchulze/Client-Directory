@@ -8,7 +8,7 @@ import type { Activity } from "@/lib/api-types";
 import type { PaymentBasis } from "@/lib/candidate-types";
 import { DASH, day, money } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { paymentTotals } from "@/lib/ui-helpers";
+import { currencyTotals, isConfirmedPayment, paymentTotals } from "@/lib/ui-helpers";
 import { Section } from "./client-sheet";
 import { Conversations, EVENT } from "@/components/shared/conversations";
 
@@ -34,6 +34,9 @@ export function ActivityTab({ activity: a }: { activity: Activity }) {
       description="Scraper conversations appear here, reviewed or not, when one of their emails is on this client's contacts." />;
   }
   const totals = paymentTotals(a.payments);
+  const confirmedTotals = paymentTotals(a.payments.filter(isConfirmedPayment));
+  const invoicedTotals = currencyTotals(a.amounts.filter((x) => x.stage === "invoiced"));
+  const hasUnconfirmed = a.payments.some((p) => !isConfirmedPayment(p));
   return (
     <div>
       <div role="tablist" aria-label="Activity views" className="mb-4 flex gap-1 rounded-full bg-card p-1">
@@ -53,12 +56,30 @@ export function ActivityTab({ activity: a }: { activity: Activity }) {
         <Conversations items={a.timeline.items} truncated={a.timeline.truncated} cardClassName="bg-card hover:bg-lift" />
       </>}
       {view === "payments" && <>
+      <dl className="mb-4 grid grid-cols-2 gap-4 rounded-2xl bg-card p-4 text-sm sm:grid-cols-3 sm:p-5">
+        <div>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Confirmed paid</dt>
+          <dd className="mt-1 flex flex-col font-bold text-success tabular-nums">
+            {confirmedTotals.length ? confirmedTotals.map((t) => <span key={t.currency ?? "unknown"}>{money({ amount: t.amount, currency: t.currency })}</span>) : <span className="text-foreground">{DASH}</span>}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Total invoiced</dt>
+          <dd className="mt-1 flex flex-col font-bold tabular-nums">
+            {invoicedTotals.length ? invoicedTotals.map((t) => <span key={t.currency ?? "unknown"}>{money({ amount: t.amount, currency: t.currency })}</span>) : DASH}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Payments</dt>
+          <dd className="mt-1 font-semibold tabular-nums">{a.payments.length}</dd>
+        </div>
+      </dl>
       <Section title="Payments">
         {a.payments.length === 0 ? <p className="text-sm text-muted-foreground">No verified payments.</p> : (
           <div>
             <ul className="flex flex-col gap-1.5">
               {a.payments.map((p, i) => {
-                const needsConfirm = p.basis !== "stated" && p.basis !== "manual";
+                const needsConfirm = !isConfirmedPayment(p);
                 return (
                   <li key={i} className={cn("flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-sm",
                     needsConfirm ? "bg-[color-mix(in_srgb,var(--warning)_10%,var(--sunk))]" : "bg-sunk")}>
@@ -71,8 +92,14 @@ export function ActivityTab({ activity: a }: { activity: Activity }) {
                 );
               })}
             </ul>
-            {totals.length > 0 && (
-              <div className="mt-3 flex flex-col gap-1 px-1 pt-1 text-sm">
+            {(confirmedTotals.length > 0 || totals.length > 0) && (
+              <div className="mt-3 flex flex-col gap-1.5 px-1 pt-1 text-sm">
+                {hasUnconfirmed && confirmedTotals.map((t) => (
+                  <div key={`confirmed-${t.currency ?? "unknown"}`} className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-muted-foreground">{confirmedTotals.length > 1 ? `Confirmed paid (${t.currency ?? "unknown"})` : "Confirmed paid"}</span>
+                    <span className="font-bold text-success tabular-nums whitespace-nowrap">{money({ amount: t.amount, currency: t.currency })}</span>
+                  </div>
+                ))}
                 {totals.map((t) => (
                   <div key={t.currency ?? "unknown"} className="flex items-center justify-between gap-3">
                     <span className="font-semibold text-muted-foreground">{totals.length > 1 ? `Total ${t.currency ?? "(currency unknown)"}` : "Total"}</span>
@@ -86,17 +113,29 @@ export function ActivityTab({ activity: a }: { activity: Activity }) {
       </Section>
       <Section title="Quotes & invoices">
         {a.amounts.length === 0 ? <p className="text-sm text-muted-foreground">None on record.</p> : (
-          <ul className="flex flex-col gap-1.5">
-            {a.amounts.map((x, i) => (
-              <li key={i} className="flex items-center justify-between gap-3 rounded-xl bg-sunk px-3.5 py-2.5 text-sm">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-                  <Pill tone={x.stage === "quoted" ? "info" : "warning"}>{x.stage === "quoted" ? "Quote" : "Invoice"}</Pill>
-                  <span className="text-muted-foreground tabular-nums whitespace-nowrap">{day(x.date)}</span>
-                </div>
-                <span className="shrink-0 font-semibold tabular-nums whitespace-nowrap">{money(x)}</span>
-              </li>
-            ))}
-          </ul>
+          <div>
+            <ul className="flex flex-col gap-1.5">
+              {a.amounts.map((x, i) => (
+                <li key={i} className="flex items-center justify-between gap-3 rounded-xl bg-sunk px-3.5 py-2.5 text-sm">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <Pill tone={x.stage === "quoted" ? "info" : "warning"}>{x.stage === "quoted" ? "Quote" : "Invoice"}</Pill>
+                    <span className="text-muted-foreground tabular-nums whitespace-nowrap">{day(x.date)}</span>
+                  </div>
+                  <span className="shrink-0 font-semibold tabular-nums whitespace-nowrap">{money(x)}</span>
+                </li>
+              ))}
+            </ul>
+            {invoicedTotals.length > 0 && (
+              <div className="mt-3 flex flex-col gap-1 px-1 pt-1 text-sm">
+                {invoicedTotals.map((t) => (
+                  <div key={t.currency ?? "unknown"} className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-muted-foreground">{invoicedTotals.length > 1 ? `Total invoiced (${t.currency ?? "unknown"})` : "Total invoiced"}</span>
+                    <span className="font-bold tabular-nums whitespace-nowrap">{money({ amount: t.amount, currency: t.currency })}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </Section>
       </>}
