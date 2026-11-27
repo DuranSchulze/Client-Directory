@@ -10,6 +10,8 @@ import { invalid, jsonBody, object } from "@/services/validation.service";
 
 export const POST = handle(async (request: Request) => {
   const user = await requireVerifiedUser();
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "application/json") throw new AppError(415, "Send the password change as JSON.");
   const { currentPassword, newPassword } = object(await jsonBody(request), ["currentPassword", "newPassword"]);
   if (!user.mustChangePassword) {
     if (typeof currentPassword !== "string" || !currentPassword) invalid("currentPassword", "Enter your current password.");

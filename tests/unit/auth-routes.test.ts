@@ -257,8 +257,8 @@ it("resets another account under the access lock and revokes its previous creden
   expect(resetResponse.headers.get("cache-control")).toBe("no-store");
   const result = await resetResponse.json();
   expect(result).toEqual({ temporaryPassword: expect.any(String) });
-  expect(await (await show(target.id)).json()).toEqual(result);
   expect(mocks.lockAccounts.mock.invocationCallOrder.at(-1)!).toBeLessThan(mocks.resetUserPassword.mock.invocationCallOrder[0]);
+  expect(await (await show(target.id)).json()).toEqual(result);
   mocks.getSession.mockResolvedValue(oldSession);
   expect((await me.GET()).status).toBe(401);
   expect((await password.POST(request("password", { newPassword: "BetterPass123!" }))).status).toBe(401);
@@ -303,6 +303,35 @@ it.each([undefined, "incorrect"])("requires the correct current password for an 
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ field: "currentPassword" });
   expect(mocks.changeUserPassword).not.toHaveBeenCalled();
+});
+
+it("rejects a cross-origin form submission for a flagged account before changing its password", async () => {
+  const { POST } = await import("@/app/api/auth/password/route");
+  const account = { ...user, mustChangePassword: true };
+  mocks.findUserById.mockResolvedValue(account);
+  const response = await POST(new Request("https://directory.example.test/api/auth/password", {
+    method: "POST",
+    headers: { "Content-Type": "text/plain", Origin: "https://sibling.example.test" },
+    body: JSON.stringify({ newPassword: "BetterPass123!" }),
+  }));
+  expect(response.status).toBe(415);
+  expect(response.headers.get("set-cookie")).toBeNull();
+  expect(mocks.changeUserPassword).not.toHaveBeenCalled();
+  expect(account).toMatchObject({ mustChangePassword: true, sessionVersion: 0, passwordHash: user.passwordHash });
+});
+
+it("does not read the target password when the admin session is revoked before the account lock", async () => {
+  const { GET } = await import("@/app/api/users/[id]/temporary-password/route");
+  const { encryptTemp } = await import("@/lib/auth/password");
+  const actor = { ...user };
+  const target = { ...user, id: 8, mustChangePassword: true, tempPasswordEnc: encryptTemp("Temporary1234!") };
+  mocks.findUserById.mockImplementation((id) => id === actor.id ? { ...actor } : target);
+  mocks.lockAccounts.mockImplementationOnce(() => { actor.sessionVersion += 1; });
+  const response = await GET(request("temporary-password"), { params: Promise.resolve({ id: String(target.id) }) });
+  expect(response.status).toBe(401);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(await response.json()).toEqual({ error: "Sign in required" });
+  expect(mocks.findUserById.mock.calls.map(([id]) => id)).toEqual([actor.id, actor.id]);
 });
 
 it("rejects a password change if a reset wins after the password was verified", async () => {

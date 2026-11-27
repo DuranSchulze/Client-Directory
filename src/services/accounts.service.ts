@@ -92,12 +92,14 @@ export async function resetPassword(session: AccountActor, userId: number) {
     return { temporaryPassword: password };
   });
 }
-export async function getTemporaryPassword(actorId: number, userId: number) {
-  if (actorId === userId) throw new AppError(400, "You cannot view your own temporary password");
-  const target = await users.findUserById(userId);
-  const password = target?.mustChangePassword && target.tempPasswordEnc ? decryptTemp(target.tempPasswordEnc) : null;
-  if (password === null) throw new AppError(404, "No temporary password");
-  return { temporaryPassword: password };
+export async function getTemporaryPassword(session: AccountActor, userId: number) {
+  if (session.id === userId) throw new AppError(400, "You cannot view your own temporary password");
+  return write(session, "Could not read temporary password", async (tx) => {
+    const target = await users.findUserById(userId, tx);
+    const password = target?.mustChangePassword && target.tempPasswordEnc ? decryptTemp(target.tempPasswordEnc) : null;
+    if (password === null) throw new AppError(404, "No temporary password");
+    return { temporaryPassword: password };
+  });
 }
 
 export async function patchAccountRole(session: AccountActor, userId: number, body: unknown) {

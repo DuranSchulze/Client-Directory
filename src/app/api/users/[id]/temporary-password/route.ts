@@ -6,7 +6,7 @@ import { id } from "@/services/validation.service";
 type Context = { params: Promise<{ id: string }> };
 const reveal = handle(async (_request: Request, context: Context) => {
   const actor = await requireRouteAccess("accounts");
-  return Response.json(await getTemporaryPassword(actor.id, id((await context.params).id)));
+  return Response.json(await getTemporaryPassword(actor, id((await context.params).id)));
 });
 
 export async function GET(request: Request, context: Context) {
