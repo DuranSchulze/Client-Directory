@@ -1,5 +1,6 @@
 import { STAGES } from "@/lib/enums";
 import type { Activity, CandidateItem, GmailRollup } from "@/lib/api-types";
+import type { TimelineItem } from "@/lib/candidate-types";
 
 export function gmailRollup(input: CandidateItem[]): GmailRollup {
   const candidates = [...new Map(input.map((candidate) => [candidate.id, candidate])).values()];
@@ -26,23 +27,41 @@ export function mergeActivity(input: CandidateItem[]): Activity {
     const date = fields.first_contact?.value;
     if (date && Number.isFinite(Date.parse(date)) && (!firstContact || Date.parse(date) < Date.parse(firstContact))) firstContact = date;
   }
-  const items = candidates.flatMap(({ fields }) => fields.timeline?.value.items ?? []);
+  const seenRawIds = new Set<number>();
+  const conversations = new Map<string, { item: TimelineItem; mailboxes: Set<string> }>();
+  for (const item of candidates.flatMap(({ fields }) => fields.timeline?.value.items ?? [])) {
+    if (seenRawIds.has(item.raw_item_id)) continue;
+    seenRawIds.add(item.raw_item_id);
+
+    const key = item.date === null || !item.snippet
+      ? `raw:${item.raw_item_id}`
+      : `${item.date}|${item.stage}|${item.snippet}`;
+    let conversation = conversations.get(key);
+    if (!conversation) {
+      conversation = { item, mailboxes: new Set() };
+      conversations.set(key, conversation);
+    }
+    if (item.mailbox) conversation.mailboxes.add(item.mailbox);
+  }
+  const items = [...conversations.values()].map(({ item, mailboxes }) => ({
+    ...item, mailboxes: [...mailboxes].sort(),
+  }));
   const subjectDate = (date: string | null) => {
     const time = date ? Date.parse(date) : NaN;
     return Number.isFinite(time) ? time : -Infinity;
   };
   const latestSubjects = new Set<string>();
   const separator = " — ";
-  for (const { mailbox, snippet } of [...items].sort((a, b) => subjectDate(b.date) - subjectDate(a.date))) {
+  for (const { mailboxes, snippet } of [...items].sort((a, b) => subjectDate(b.date) - subjectDate(a.date))) {
     const end = snippet?.indexOf(separator);
     // Scraper trims the whole snippet, so a blank subject can start with a bare separator.
-    if (!mailbox || !snippet || end <= 0 || /^—(?:\s|$)/.test(snippet)) continue;
+    if (!mailboxes.length || !snippet || end <= 0 || /^—(?:\s|$)/.test(snippet)) continue;
     const subject = snippet.slice(0, end).trim();
     if (subject) latestSubjects.add(subject);
     if (latestSubjects.size === 3) break;
   }
   return { candidates, stage: rollup.stage, stageDates, needsCheck: rollup.needsCheck,
-    summary: { stage: rollup.stage, firstContact, lastContact: rollup.lastContact, messages: new Set(items.map((item) => item.raw_item_id)).size, latestSubjects: [...latestSubjects] },
+    summary: { stage: rollup.stage, firstContact, lastContact: rollup.lastContact, messages: items.length, latestSubjects: [...latestSubjects] },
     amounts: candidates.flatMap(({ fields }) => fields.amounts?.value ?? []),
     payments: candidates.flatMap(({ fields }) => fields.payments?.value ?? []),
     timeline: { items: items.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "")),

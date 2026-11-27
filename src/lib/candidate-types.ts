@@ -12,6 +12,7 @@ export type Payment = {
 export type Handler = { department: string; mailbox: string; first: string | null; last: string | null; messages: number };
 export type TimelineItem = {
   date: string | null; stage: string; department: string; mailbox: string;
+  mailboxes?: string[];
   amounts: Amount[]; raw_item_id: number; snippet: string;
 };
 export type CandidateFields = Partial<{
