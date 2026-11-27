@@ -3,7 +3,8 @@ import { withTransaction, type Tx } from "@/db";
 import { AppError, isUniqueViolation } from "@/lib/errors";
 import { ROUTES } from "@/lib/routes";
 import { EMAIL_RE, normEmail } from "@/lib/normalize";
-import { sessionUser } from "@/lib/auth/guard";
+import { requireChangedPassword, sessionUser } from "@/lib/auth/guard";
+import { temporaryPassword } from "@/lib/auth/password";
 import type { Account, Role, RoleInput } from "@/lib/api-types";
 import * as roles from "@/repositories/roles.repository";
 import * as users from "@/repositories/users.repository";
@@ -26,6 +27,7 @@ async function write<T>(actorId: number, conflict: string, fn: (tx: Tx, actor: u
       await roles.lockAccounts(tx);
       const actor = await users.findUserById(actorId, tx);
       if (!actor || !actor.active) throw new AppError(401, "Sign in required");
+      requireChangedPassword(actor);
       if (!sessionUser(actor).routes.includes("accounts")) throw new AppError(403, "You don't have access to this page");
       return fn(tx, actor);
     });
@@ -64,15 +66,26 @@ export async function removeRole(actorId: number, roleId: number) {
   });
 }
 export async function createAccount(actorId: number, body: unknown) {
-  const input = object(body, ["name", "email", "password", "roleId"]);
+  const input = object(body, ["name", "email", "roleId"]);
   const displayName = name(input.name), roleId = id(input.roleId, "roleId");
   if (typeof input.email !== "string" || !EMAIL_RE.test(normEmail(input.email))) invalid("email", "Enter a valid email address");
-  if (typeof input.password !== "string" || !input.password || Buffer.byteLength(input.password) > 72) invalid("password", "Enter a password of at most 72 bytes");
-  const email = normEmail(input.email), passwordHash = await hash(input.password, 12);
+  const email = normEmail(input.email);
+  const password = temporaryPassword(email);
+  const passwordHash = await hash(password, 12);
   return write(actorId, "Email already exists", async (tx) => {
     if (!await roles.findRole(roleId, tx)) throw new AppError(404, "Role not found");
-    const row = await users.insertAdmin({ name: displayName, email, passwordHash, roleId }, tx);
-    return accountDto((await users.findUserById(row.id, tx))!);
+    const row = await users.insertAccount({ name: displayName, email, passwordHash, roleId }, tx);
+    return { ...accountDto((await users.findUserById(row.id, tx))!), temporaryPassword: password };
+  });
+}
+export async function resetPassword(actorId: number, userId: number) {
+  return write(actorId, "Could not reset password", async (tx) => {
+    if (actorId === userId) throw new AppError(400, "Use Change password to reset your own password");
+    const target = await users.findUserById(userId, tx);
+    if (!target) throw new AppError(404, "User not found");
+    const password = temporaryPassword(target.email);
+    await users.resetUserPassword(userId, await hash(password, 12), tx);
+    return { temporaryPassword: password };
   });
 }
 export async function patchAccountRole(actorId: number, userId: number, body: unknown) {

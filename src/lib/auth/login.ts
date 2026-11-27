@@ -17,5 +17,5 @@ export async function login(body: unknown) {
   const user = await findUserByEmail(normEmail(body.email));
   const matches = await compare(body.password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !matches || !user.active) throw new AppError(401, "Invalid email or password");
-  return { token: await createSession(user.id), item: sessionUser(user) };
+  return { token: await createSession(user.id, user.sessionVersion), item: sessionUser(user) };
 }

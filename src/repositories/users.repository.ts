@@ -28,3 +28,19 @@ export async function hasUsers(ex: Executor = db): Promise<boolean> {
 export async function insertAdmin(input: { email: string; name: string; passwordHash: string; roleId: number }, ex: Executor = db) {
   return (await ex.insert(users).values(input).returning())[0];
 }
+
+export async function insertAccount(input: Parameters<typeof insertAdmin>[0], ex: Executor) {
+  return (await ex.insert(users).values({ ...input, mustChangePassword: true }).returning())[0];
+}
+
+export async function resetUserPassword(id: number, passwordHash: string, ex: Executor) {
+  await ex.update(users).set({ passwordHash, mustChangePassword: true, sessionVersion: sql`${users.sessionVersion} + 1` })
+    .where(eq(users.id, id));
+}
+
+export async function changeUserPassword(id: number, ver: number, passwordHash: string) {
+  const [updated] = await db.update(users).set({ passwordHash, mustChangePassword: false, sessionVersion: sql`${users.sessionVersion} + 1` })
+    .where(and(eq(users.id, id), eq(users.sessionVersion, ver), eq(users.active, true)))
+    .returning({ sessionVersion: users.sessionVersion });
+  return updated ?? null;
+}

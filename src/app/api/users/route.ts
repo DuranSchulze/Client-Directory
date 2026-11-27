@@ -9,5 +9,5 @@ export const GET = handle(async () => {
 });
 export const POST = handle(async (request: Request) => {
   const actor = await requireRouteAccess("accounts");
-  return Response.json({ item: await createAccount(actor.id, await jsonBody(request)) }, { status: 201 });
+  return Response.json({ item: await createAccount(actor.id, await jsonBody(request)) }, { status: 201, headers: { "Cache-Control": "no-store" } });
 });

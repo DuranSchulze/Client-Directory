@@ -6,14 +6,14 @@ vi.mock("@/db", () => ({ withTransaction: m.transaction }));
 vi.mock("bcryptjs", () => ({ hash: m.hash }));
 vi.mock("@/lib/auth/get-session", () => ({ getSession: m.session }));
 vi.mock("@/repositories/roles.repository", () => ({ lockAccounts: m.lock, findRole: m.findRole, findOwnerRole: m.findOwner, insertRole: m.insertRole, updateRole: m.updateRole, deleteRole: m.deleteRole, listRoles: m.listRoles }));
-vi.mock("@/repositories/users.repository", () => ({ findUserById: m.findUser, listUsers: m.listUsers, insertAdmin: m.insertUser, updateUserRole: m.updateUser, countActiveOwners: m.owners }));
+vi.mock("@/repositories/users.repository", () => ({ findUserById: m.findUser, listUsers: m.listUsers, insertAccount: m.insertUser, updateUserRole: m.updateUser, countActiveOwners: m.owners }));
 import { createRole, patchRole, removeRole, createAccount, patchAccountRole, getAccounts, getRoles } from "@/services/accounts.service";
 
 const tx = { transaction: true };
 let roles: Map<number, Role>;
-let people: Map<number, { id: number; email: string; name: string; roleId: number; active: boolean; passwordHash: string; createdAt: Date }>;
+let people: Map<number, { id: number; email: string; name: string; roleId: number; active: boolean; passwordHash: string; createdAt: Date; mustChangePassword: boolean; sessionVersion: number }>;
 function person(id: number) { const p = people.get(id); return p ? { ...p, role: roles.get(p.roleId)! } : null; }
-const account = { name: " New Person ", email: " NEW@EXAMPLE.TEST ", password: "secret", roleId: 3 };
+const account = { name: " New Person ", email: " NEW@EXAMPLE.TEST ", roleId: 3 };
 beforeEach(() => {
   vi.resetAllMocks();
   roles = new Map([
@@ -21,9 +21,9 @@ beforeEach(() => {
     [2, { id: 2, name: "Managers", routes: ["accounts"], locked: false, users: 0 }],
     [3, { id: 3, name: "Importers", routes: ["import"], locked: false, users: 0 }],
   ]);
-  people = new Map([1, 2].map((id) => [id, { id, email: `user${id}@example.test`, name: `Person ${id}`, roleId: 1, active: true, passwordHash: "private-hash", createdAt: new Date("2026-01-01T00:00:00Z") }]));
+  people = new Map([1, 2].map((id) => [id, { id, email: `user${id}@example.test`, name: `Person ${id}`, roleId: 1, active: true, passwordHash: "private-hash", createdAt: new Date("2026-01-01T00:00:00Z"), mustChangePassword: false, sessionVersion: 0 }]));
   m.transaction.mockImplementation((fn) => fn(tx));
-  m.session.mockResolvedValue({ userId: 1 });
+  m.session.mockResolvedValue({ userId: 1, ver: 0 });
   m.findRole.mockImplementation((id) => roles.get(id) ?? null);
   m.findOwner.mockImplementation(() => roles.get(1));
   m.findUser.mockImplementation((id) => person(id));
@@ -32,7 +32,7 @@ beforeEach(() => {
   m.insertRole.mockImplementation((value) => { const row = { id: 4, locked: false, users: 0, ...value }; roles.set(4, row); return row; });
   m.updateRole.mockImplementation((id, value) => roles.set(id, { ...roles.get(id)!, ...value }));
   m.deleteRole.mockImplementation((id) => roles.delete(id));
-  m.insertUser.mockImplementation((value) => { const row = { id: 3, active: true, createdAt: new Date("2026-01-01T00:00:00Z"), ...value }; people.set(3, row); return row; });
+  m.insertUser.mockImplementation((value) => { const row = { id: 3, active: true, createdAt: new Date("2026-01-01T00:00:00Z"), mustChangePassword: true, sessionVersion: 0, ...value }; people.set(3, row); return row; });
   m.updateUser.mockImplementation((id, roleId) => people.set(id, { ...people.get(id)!, roleId }));
 });
 it("creates trimmed roles with canonical routes and a numeric user count, under the lock", async () => {
@@ -84,19 +84,20 @@ it("re-reads the actor after the lock and refuses inactive, missing, or revoked 
   m.lock.mockImplementationOnce(() => { people.get(1)!.roleId = 3; });
   await expect(createRole(1, { name: "Revoked while waiting", routes: ["import"] })).rejects.toMatchObject({ status: 403 });
 });
-it("creates accounts with bcrypt 12 and normalized email, and never returns passwords or hashes", async () => {
-  const result = await createAccount(1, account);
-  expect(result).toEqual({ id: 3, name: "New Person", email: "new@example.test", role: { id: 3, name: "Importers" }, routes: ["import"], active: true, createdAt: "2026-01-01T00:00:00.000Z" });
-  expect(m.hash).toHaveBeenCalledWith("secret", 12);
-  expect(JSON.stringify(await getAccounts())).not.toContain("private-hash");
+it("creates accounts with bcrypt 12 and exposes the temporary password only on creation", async () => {
+  const { temporaryPassword, ...result } = await createAccount(1, account);
+  expect(result).toEqual({ id: 3, name: "New Person", email: "new@example.test", role: { id: 3, name: "Importers" }, routes: ["import"], active: true, createdAt: "2026-01-01T00:00:00.000Z", mustChangePassword: true });
+  expect(m.hash).toHaveBeenCalledWith(temporaryPassword, 12);
+  const serialized = JSON.stringify(await getAccounts());
+  expect(serialized).not.toContain(temporaryPassword);
+  expect(serialized).not.toContain("private-hash");
   expect((await getRoles())[0].routes).toEqual(["directory", "import", "accounts"]);
 });
-it.each([{ name: " " }, { name: "x".repeat(201) }, { email: "bad" }, { email: 3 }, { password: "" }, { password: "x".repeat(73) }, { password: "é".repeat(37) }, { roleId: -1 }, { roleId: "bad" }, { active: false }, { passwordHash: "supplied" }])("validates account input and rejects unknown keys: %j", async (change) => {
+it.each([{ name: " " }, { name: "x".repeat(201) }, { email: "bad" }, { email: 3 }, { password: "provided" }, { roleId: -1 }, { roleId: "bad" }, { active: false }, { passwordHash: "supplied" }])("validates account input and rejects unknown keys: %j", async (change) => {
   await expect(createAccount(1, { ...account, ...change })).rejects.toMatchObject({ status: 400 });
   expect(m.insertUser).not.toHaveBeenCalled();
 });
-it("accepts a 72-byte UTF-8 password and rejects extra assignment keys and missing roles/users", async () => {
-  await createAccount(1, { ...account, password: "é".repeat(36) });
+it("rejects extra assignment keys and missing roles/users", async () => {
   await expect(patchAccountRole(1, 2, { roleId: 3, active: false })).rejects.toMatchObject({ status: 400, field: "active" });
   await expect(createAccount(1, { ...account, roleId: 99 })).rejects.toMatchObject({ status: 404, message: "Role not found" });
   await expect(patchAccountRole(1, 99, { roleId: 3 })).rejects.toMatchObject({ status: 404, message: "User not found" });
@@ -120,6 +121,10 @@ it("returns the frozen API response envelopes and requires accounts on all endpo
   expect((await (await role.PATCH(request({ name: "Edit", routes: ["directory"] }), { params: Promise.resolve({ id: "3" }) })).json()).item.name).toBe("Edit");
   const createdAccount = await accountRoutes.POST(request(account));
   expect(createdAccount.status).toBe(201); expect((await createdAccount.json()).item.role.id).toBe(3);
+  expect(createdAccount.headers.get("cache-control")).toBe("no-store");
+  const rejectedPassword = await accountRoutes.POST(request({ ...account, password: "supplied" }));
+  expect(rejectedPassword.status).toBe(400);
+  expect(await rejectedPassword.json()).toMatchObject({ field: "password" });
   expect((await (await accountRoutes.GET()).json()).items).toHaveLength(3);
   expect((await (await user.PATCH(request({ roleId: 2 }), { params: Promise.resolve({ id: "2" }) })).json()).item.role.id).toBe(2);
   expect(await (await role.DELETE(request({}), { params: Promise.resolve({ id: "4" }) })).json()).toEqual({ ok: true });
