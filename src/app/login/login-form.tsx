@@ -9,13 +9,16 @@ import type { AuthResponse } from "@/lib/api-types";
 import type { RouteKey } from "@/lib/routes";
 import { homeFor, routeFor } from "@/lib/access";
 
+// The pages under src/app/(app); anything else (auth pages, API paths, typos) falls back to home instead of a 404.
+const APP_PAGES = /^\/(?:clients|probity|needs-company|inquiries|suppliers|dept-emails|import|accounts)(?:\/|$)/;
+
 /** Only same-origin app pages the account's role can open are followed; auth pages, API paths and anything unknown go to its home. */
 export function safeNext(v: string | null, routes: RouteKey[]) {
   const home = homeFor(routes);
   if (!v || !v.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(v)) return home;
   try {
     const url = new URL(v, window.location.origin);
-    if (url.origin !== window.location.origin || /^\/(?:login|change-password|api)(?:\/|$)/.test(url.pathname)) return home;
+    if (url.origin !== window.location.origin || !APP_PAGES.test(url.pathname)) return home;
     const need = routeFor(url.pathname);
     return need && routes.includes(need) ? url.href : home;
   } catch { return home; }

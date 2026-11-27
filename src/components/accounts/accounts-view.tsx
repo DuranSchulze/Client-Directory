@@ -42,7 +42,7 @@ export function AccountsView() {
   const [resetting, setResetting] = useState<Account | null>(null);
   // Only this state holds a temporary password; mutations return metadata, so nothing secret lingers in the query cache.
   const [issued, setIssued] = useState<Issued | null>(null);
-  // One reveal at a time, so a slow response can't replace the password the admin just copied.
+  // One credential operation at a time (reveal or reset), so a slow response can't replace a newer password in the dialog.
   const [revealing, setRevealing] = useState(false);
   const reset = useMutate<Account, null>({
     fn: (u) => request<TemporaryPassword>(`/api/users/${u.id}/reset-password`, { method: "POST" })
@@ -59,8 +59,8 @@ export function AccountsView() {
     { key: "created", header: "Created", desktopOnly: true, sortValue: (u) => u.createdAt, className: "whitespace-nowrap text-muted-foreground tabular-nums", render: (u) => stamp(u.createdAt) },
     { key: "actions", header: "Password", className: "w-60", render: (u) => u.id === me?.id ? null : (
       <div className="flex flex-wrap items-center gap-1 md:flex-nowrap">
-        {u.hasTemporaryPassword && <ShowTemporaryButton account={u} onShow={setIssued} busy={revealing} setBusy={setRevealing} />}
-        <Button size="sm" variant="ghost" aria-label={`Reset password for ${u.name}`} onClick={() => setResetting(u)}><KeyRound />Reset</Button>
+        {u.hasTemporaryPassword && <ShowTemporaryButton account={u} onShow={setIssued} busy={revealing || reset.isPending} setBusy={setRevealing} />}
+        <Button size="sm" variant="ghost" aria-label={`Reset password for ${u.name}`} disabled={revealing} onClick={() => setResetting(u)}><KeyRound />Reset</Button>
       </div>
     ) },
   ];
