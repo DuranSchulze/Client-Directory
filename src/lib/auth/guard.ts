@@ -37,7 +37,9 @@ export async function requireActiveUser() {
   return sessionUser(user);
 }
 export async function requireRouteAccess(route: RouteKey) {
-  const user = await requireActiveUser();
+  const row = await requireVerifiedUser();
+  requireChangedPassword(row);
+  const user = sessionUser(row);
   if (!user.routes.includes(route)) throw new AppError(403, "You don't have access to this page");
-  return user;
+  return { ...user, sessionVersion: row.sessionVersion };
 }

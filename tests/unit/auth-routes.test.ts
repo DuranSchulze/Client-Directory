@@ -4,13 +4,13 @@ import { ROUTES } from "@/lib/routes";
 
 const mocks = vi.hoisted(() => ({
   findUserByEmail: vi.fn(), findUserById: vi.fn(), getSession: vi.fn(), changeUserPassword: vi.fn(),
-  insertAccount: vi.fn(), resetUserPassword: vi.fn(), lockAccounts: vi.fn(), findRole: vi.fn(),
+  insertAccount: vi.fn(), resetUserPassword: vi.fn(), lockAccounts: vi.fn(), findRole: vi.fn(), listUsers: vi.fn(),
 }));
 vi.mock("@/repositories/users.repository", () => mocks);
 vi.mock("@/repositories/roles.repository", () => mocks);
 vi.mock("@/db", () => ({ withTransaction: (fn: (tx: object) => unknown) => fn({}) }));
 vi.mock("@/lib/auth/get-session", () => ({ getSession: mocks.getSession }));
-const user = { id: 7, email: "admin@example.com", name: "Admin", roleId: 1, role: { id: 1, name: "Owner", locked: true, routes: [...ROUTES] }, active: true, passwordHash: "", createdAt: new Date(), mustChangePassword: false, sessionVersion: 0 };
+const user = { id: 7, email: "admin@example.com", name: "Admin", roleId: 1, role: { id: 1, name: "Owner", locked: true, routes: [...ROUTES] }, active: true, passwordHash: "", createdAt: new Date(), mustChangePassword: false, sessionVersion: 0, tempPasswordEnc: null as string | null };
 const publicUser = { id: user.id, email: user.email, name: user.name, role: { id: 1, name: "Owner" }, routes: [...ROUTES], mustChangePassword: false };
 let ip = 0;
 function request(path: string, body?: unknown) {
@@ -143,24 +143,35 @@ it("lets a newly created account sign in, then requires a password change before
   const me = await import("@/app/api/auth/me/route");
   const logout = await import("@/app/api/auth/logout/route");
   const password = await import("@/app/api/auth/password/route");
+  const reveal = await import("@/app/api/users/[id]/temporary-password/route");
   const account = { ...user, id: 8, email: "employee@example.test", mustChangePassword: true };
+  const revealTemp = () => reveal.GET(request("temporary-password"), { params: Promise.resolve({ id: String(account.id) }) });
   mocks.findRole.mockResolvedValue(user.role);
+  mocks.listUsers.mockImplementation(() => [user, { ...account }]);
   mocks.findUserById.mockImplementation((id) => id === user.id ? user : { ...account });
   mocks.findUserByEmail.mockImplementation(() => ({ ...account }));
-  mocks.insertAccount.mockImplementation(({ passwordHash }) => {
-    account.passwordHash = passwordHash;
+  mocks.insertAccount.mockImplementation((credential) => {
+    Object.assign(account, credential);
     return account;
   });
   mocks.changeUserPassword.mockImplementation((id, ver, passwordHash) => {
     if (id !== account.id || ver !== account.sessionVersion) return null;
-    Object.assign(account, { passwordHash, mustChangePassword: false, sessionVersion: ver + 1 });
+    Object.assign(account, { passwordHash, tempPasswordEnc: null, mustChangePassword: false, sessionVersion: ver + 1 });
     return { sessionVersion: account.sessionVersion };
   });
 
   const created = await accounts.POST(request("users", { name: account.name, email: account.email, roleId: account.roleId }));
   expect(created.status).toBe(201);
   expect(created.headers.get("cache-control")).toBe("no-store");
-  const { temporaryPassword } = (await created.json()).item;
+  const createdItem = (await created.json()).item;
+  const { temporaryPassword } = createdItem;
+  expect(createdItem).toMatchObject({ hasTemporaryPassword: true });
+  expect(createdItem).not.toHaveProperty("tempPasswordEnc");
+  const listed = (await (await accounts.GET()).json()).items.find(({ id }: { id: number }) => id === account.id);
+  expect(listed).toMatchObject({ hasTemporaryPassword: true });
+  expect(listed).not.toHaveProperty("temporaryPassword");
+  expect(listed).not.toHaveProperty("tempPasswordEnc");
+  expect(await (await revealTemp()).json()).toEqual({ temporaryPassword });
   const signIn = () => login.POST(request("login", { email: account.email, password: temporaryPassword }));
   mocks.getSession.mockResolvedValue(null);
   const signedIn = await signIn();
@@ -179,19 +190,20 @@ it("lets a newly created account sign in, then requires a password change before
   expect(signedOut.status).toBe(200);
   expect(signedOut.headers.get("set-cookie")).toContain("Max-Age=0");
 
-  const freshPassword = "BetterPass123!";
-  for (const [current, next, field] of [
-    ["incorrect", freshPassword, "currentPassword"],
-    [temporaryPassword, temporaryPassword, "newPassword"],
-    [temporaryPassword, "weak", "newPassword"],
+  const freshPassword = "Employee1234!";
+  for (const [candidate, error] of [
+    [temporaryPassword, "Choose a password you haven't used here before."],
+    [`${temporaryPassword}\0${temporaryPassword}`, "Choose a password you haven't used here before."],
+    ["weak", "Use at least 12 characters."],
   ]) {
-    const rejected = await password.POST(request("password", { currentPassword: current, newPassword: next }));
+    const rejected = await password.POST(request("password", { currentPassword: "ignored", newPassword: candidate }));
     expect(rejected.status).toBe(400);
-    expect(await rejected.json()).toMatchObject({ field });
+    expect(await rejected.json()).toEqual({ field: "newPassword", error });
     expect(rejected.headers.get("set-cookie")).toBeNull();
   }
   expect(mocks.changeUserPassword).not.toHaveBeenCalled();
-  const changed = await password.POST(request("password", { currentPassword: temporaryPassword, newPassword: freshPassword }));
+  expect(account).toMatchObject({ mustChangePassword: true, sessionVersion: 0 });
+  const changed = await password.POST(request("password", { newPassword: freshPassword }));
   expect(changed.status).toBe(200);
   expect(changed.headers.get("set-cookie")).toContain("HttpOnly");
   expect(changed.headers.get("cache-control")).toBe("no-store");
@@ -202,24 +214,34 @@ it("lets a newly created account sign in, then requires a password change before
   mocks.getSession.mockResolvedValue(freshSession);
   expect((await me.GET()).status).toBe(200);
   expect(await compare(freshPassword, account.passwordHash)).toBe(true);
+  mocks.getSession.mockResolvedValue({ userId: user.id, ver: 0 });
+  const noPassword = await revealTemp();
+  expect(noPassword.status).toBe(404);
+  expect(noPassword.headers.get("cache-control")).toBe("no-store");
+  expect(await noPassword.json()).toEqual({ error: "No temporary password" });
+  expect((await (await accounts.GET()).json()).items.find(({ id }: { id: number }) => id === account.id)).toMatchObject({ hasTemporaryPassword: false });
 });
 
 it("resets another account under the access lock and revokes its previous credentials", async () => {
   const reset = await import("@/app/api/users/[id]/reset-password/route");
   const login = await import("@/app/api/auth/login/route");
   const me = await import("@/app/api/auth/me/route");
-  const target = { ...user, id: 8, email: "employee@example.test", sessionVersion: 2 };
+  const password = await import("@/app/api/auth/password/route");
+  const reveal = await import("@/app/api/users/[id]/temporary-password/route");
+  const { encryptTemp } = await import("@/lib/auth/password");
+  const target = { ...user, id: 8, email: "employee@example.test", sessionVersion: 2, mustChangePassword: true, tempPasswordEnc: encryptTemp("correct-password") };
   const previousHash = target.passwordHash;
   const oldSession = { userId: target.id, ver: 2 };
   const call = (id: number) => reset.POST(request("reset-password"), { params: Promise.resolve({ id: String(id) }) });
+  const show = (id: number) => reveal.GET(request("temporary-password"), { params: Promise.resolve({ id: String(id) }) });
   mocks.findUserById.mockImplementation((id) => id === target.id ? { ...target } : id === user.id ? user : null);
   mocks.findUserByEmail.mockImplementation(() => ({ ...target }));
-  mocks.resetUserPassword.mockImplementation((_id, passwordHash) => {
-    Object.assign(target, { passwordHash, mustChangePassword: true, sessionVersion: 3 });
+  mocks.resetUserPassword.mockImplementation((_id, credential) => {
+    Object.assign(target, { ...credential, mustChangePassword: true, sessionVersion: 3 });
   });
 
   mocks.getSession.mockResolvedValue(oldSession);
-  mocks.findUserById.mockResolvedValueOnce({ ...target, role: { id: 2, name: "Directory", locked: false, routes: ["directory"] } });
+  mocks.findUserById.mockResolvedValueOnce({ ...target, mustChangePassword: false, role: { id: 2, name: "Directory", locked: false, routes: ["directory"] } });
   expect((await call(target.id)).status).toBe(403);
   mocks.getSession.mockResolvedValue({ userId: user.id, ver: 0 });
   const self = await call(user.id);
@@ -228,15 +250,18 @@ it("resets another account under the access lock and revokes its previous creden
   expect((await call(99)).status).toBe(404);
   expect(mocks.resetUserPassword).not.toHaveBeenCalled();
   expect(target).toMatchObject({ passwordHash: previousHash, sessionVersion: 2 });
+  expect(await (await show(target.id)).json()).toEqual({ temporaryPassword: "correct-password" });
 
   const resetResponse = await call(target.id);
   expect(resetResponse.status).toBe(200);
   expect(resetResponse.headers.get("cache-control")).toBe("no-store");
   const result = await resetResponse.json();
   expect(result).toEqual({ temporaryPassword: expect.any(String) });
+  expect(await (await show(target.id)).json()).toEqual(result);
   expect(mocks.lockAccounts.mock.invocationCallOrder.at(-1)!).toBeLessThan(mocks.resetUserPassword.mock.invocationCallOrder[0]);
   mocks.getSession.mockResolvedValue(oldSession);
   expect((await me.GET()).status).toBe(401);
+  expect((await password.POST(request("password", { newPassword: "BetterPass123!" }))).status).toBe(401);
   const signIn = (password: string) => login.POST(request("login", { email: target.email, password }));
   expect((await signIn("correct-password")).status).toBe(401);
   const fresh = await signIn(result.temporaryPassword);
@@ -244,6 +269,40 @@ it("resets another account under the access lock and revokes its previous creden
   expect((await fresh.json()).item.mustChangePassword).toBe(true);
   mocks.getSession.mockResolvedValue(await sessionFrom(fresh));
   expect((await me.GET()).status).toBe(200);
+});
+
+it("protects the temporary-password reveal and sends no-store for failures", async () => {
+  const { GET } = await import("@/app/api/users/[id]/temporary-password/route");
+  const { encryptTemp } = await import("@/lib/auth/password");
+  const self = { userId: user.id, ver: 0 };
+  const target = { ...user, id: 8, mustChangePassword: true };
+  const call = (id: number) => GET(request("temporary-password"), { params: Promise.resolve({ id: String(id) }) });
+  const check = async (id: number, status: number) => {
+    const response = await call(id);
+    expect(response.status).toBe(status);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    if (status === 404) expect(await response.json()).toEqual({ error: "No temporary password" });
+  };
+  mocks.getSession.mockResolvedValue(null);
+  await check(target.id, 401);
+  mocks.getSession.mockResolvedValue(self);
+  mocks.findUserById.mockResolvedValueOnce({ ...user, role: { id: 2, name: "Directory", locked: false, routes: ["directory"] } });
+  await check(target.id, 403);
+  await check(user.id, 400);
+  mocks.findUserById.mockImplementation((id) => id === user.id ? user : target);
+  await check(target.id, 404);
+  target.tempPasswordEnc = encryptTemp("Temporary1234!");
+  await check(target.id, 200);
+  vi.stubEnv("SESSION_SECRET", "rotated-test-secret-at-least-32-characters");
+  await check(target.id, 404);
+});
+
+it.each([undefined, "incorrect"])("requires the correct current password for an unflagged account", async (currentPassword) => {
+  const { POST } = await import("@/app/api/auth/password/route");
+  const response = await POST(request("password", { currentPassword, newPassword: "BetterPass123!" }));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ field: "currentPassword" });
+  expect(mocks.changeUserPassword).not.toHaveBeenCalled();
 });
 
 it("rejects a password change if a reset wins after the password was verified", async () => {

@@ -1,17 +1,17 @@
-export const PASSWORD_RULES = [
-  { id: "blank", label: "Password cannot be blank", test: (pw: string) => !!pw.trim() },
-  { id: "length", label: "Password must be at least 12 characters and at most 72 UTF-8 bytes", test: (pw: string) =>
-    pw.length <= 72 && !/\p{Cs}/u.test(pw) && [...pw].length >= 12 && new TextEncoder().encode(pw).length <= 72 },
-  { id: "upper", label: "Password must contain an uppercase letter", test: (pw: string) => /[A-Z]/.test(pw) },
-  { id: "lower", label: "Password must contain a lowercase letter", test: (pw: string) => /[a-z]/.test(pw) },
-  { id: "digit", label: "Password must contain a digit", test: (pw: string) => /[0-9]/.test(pw) },
-  { id: "symbol", label: "Password must contain a symbol", test: (pw: string) => /[^\p{L}\p{N}\s]/u.test(pw) },
-  { id: "email", label: "Password must not contain the part of your email before @", test: (pw: string, email: string) => {
-    const local = email.split("@")[0].toLowerCase();
-    return [...local].length < 3 || !pw.toLowerCase().includes(local);
-  } },
-] as const satisfies ReadonlyArray<{ id: string; label: string; test(pw: string, email: string): boolean }>;
+const rules = [
+  { id: "length", label: "At least 12 characters", error: "Use at least 12 characters.", test: (pw: string) => [...pw].length >= 12 },
+  { id: "upper", label: "An uppercase letter (A-Z)", error: "Add an uppercase letter (A-Z).", test: (pw: string) => /[A-Z]/.test(pw) },
+  { id: "lower", label: "A lowercase letter (a-z)", error: "Add a lowercase letter (a-z).", test: (pw: string) => /[a-z]/.test(pw) },
+  { id: "digit", label: "A number (0-9)", error: "Add a number (0-9).", test: (pw: string) => /[0-9]/.test(pw) },
+  { id: "symbol", label: "A symbol, such as ! # or @", error: "Add a symbol, such as ! # or @.", test: (pw: string) => /[^\p{L}\p{N}\s]/u.test(pw) },
+];
 
-export function validatePassword(pw: string, email: string): string | null {
-  return PASSWORD_RULES.find((rule) => !rule.test(pw, email))?.label ?? null;
+type PasswordRule = { id: string; label: string; test(pw: string, email?: string): boolean };
+export const PASSWORD_RULES: readonly PasswordRule[] = rules.map(({ id, label, test }) => ({ id, label, test }));
+
+export function validatePassword(pw: string): string | null {
+  if (!pw.trim()) return "Enter a password.";
+  if (pw.length > 72 || new TextEncoder().encode(pw).length > 72) return "This password is too long. Try a shorter one.";
+  if (/\p{Cs}/u.test(pw)) return "This password contains an invalid character.";
+  return rules.find((rule) => !rule.test(pw))?.error ?? null;
 }

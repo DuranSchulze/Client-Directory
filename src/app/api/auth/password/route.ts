@@ -11,13 +11,17 @@ import { invalid, jsonBody, object } from "@/services/validation.service";
 export const POST = handle(async (request: Request) => {
   const user = await requireVerifiedUser();
   const { currentPassword, newPassword } = object(await jsonBody(request), ["currentPassword", "newPassword"]);
-  if (typeof currentPassword !== "string" || !currentPassword || Buffer.byteLength(currentPassword) > 72) {
-    invalid("currentPassword", "Enter a password of at most 72 bytes");
+  if (!user.mustChangePassword) {
+    if (typeof currentPassword !== "string" || !currentPassword) invalid("currentPassword", "Enter your current password.");
+    if (Buffer.byteLength(currentPassword) > 72 || !await compare(currentPassword, user.passwordHash)) {
+      invalid("currentPassword", "Current password is incorrect.");
+    }
   }
-  if (!await compare(currentPassword, user.passwordHash)) invalid("currentPassword", "Current password is incorrect");
-  if (typeof newPassword !== "string") invalid("newPassword", "Enter a new password");
-  if (newPassword === currentPassword) invalid("newPassword", "New password must differ from current password");
-  const error = validatePassword(newPassword, user.email);
+  if (typeof newPassword !== "string") invalid("newPassword", "Enter a new password.");
+  if (Buffer.byteLength(newPassword) <= 72 && await compare(newPassword, user.passwordHash)) {
+    invalid("newPassword", "Choose a password you haven't used here before.");
+  }
+  const error = validatePassword(newPassword);
   if (error) invalid("newPassword", error);
 
   const updated = await changeUserPassword(user.id, user.sessionVersion, await hash(newPassword, 12));

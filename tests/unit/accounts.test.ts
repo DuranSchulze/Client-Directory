@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Role } from "@/lib/api-types";
 import type { RouteKey } from "@/lib/routes";
 const m = vi.hoisted(() => ({ transaction: vi.fn(), lock: vi.fn(), findRole: vi.fn(), findOwner: vi.fn(), insertRole: vi.fn(), updateRole: vi.fn(), deleteRole: vi.fn(), listRoles: vi.fn(), findUser: vi.fn(), listUsers: vi.fn(), insertUser: vi.fn(), updateUser: vi.fn(), owners: vi.fn(), hash: vi.fn(), session: vi.fn() }));
@@ -11,17 +11,20 @@ import { createRole, patchRole, removeRole, createAccount, patchAccountRole, get
 
 const tx = { transaction: true };
 let roles: Map<number, Role>;
-let people: Map<number, { id: number; email: string; name: string; roleId: number; active: boolean; passwordHash: string; createdAt: Date; mustChangePassword: boolean; sessionVersion: number }>;
+let people: Map<number, { id: number; email: string; name: string; roleId: number; active: boolean; passwordHash: string; createdAt: Date; mustChangePassword: boolean; sessionVersion: number; tempPasswordEnc: string | null }>;
 function person(id: number) { const p = people.get(id); return p ? { ...p, role: roles.get(p.roleId)! } : null; }
 const account = { name: " New Person ", email: " NEW@EXAMPLE.TEST ", roleId: 3 };
+const actor = { id: 1, sessionVersion: 0 };
+afterEach(() => vi.unstubAllEnvs());
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv("SESSION_SECRET", "test-secret-with-at-least-32-characters");
   roles = new Map([
     [1, { id: 1, name: "Owner", routes: [], locked: true, users: 2 }],
     [2, { id: 2, name: "Managers", routes: ["accounts"], locked: false, users: 0 }],
     [3, { id: 3, name: "Importers", routes: ["import"], locked: false, users: 0 }],
   ]);
-  people = new Map([1, 2].map((id) => [id, { id, email: `user${id}@example.test`, name: `Person ${id}`, roleId: 1, active: true, passwordHash: "private-hash", createdAt: new Date("2026-01-01T00:00:00Z"), mustChangePassword: false, sessionVersion: 0 }]));
+  people = new Map([1, 2].map((id) => [id, { id, email: `user${id}@example.test`, name: `Person ${id}`, roleId: 1, active: true, passwordHash: "private-hash", createdAt: new Date("2026-01-01T00:00:00Z"), mustChangePassword: false, sessionVersion: 0, tempPasswordEnc: null }]));
   m.transaction.mockImplementation((fn) => fn(tx));
   m.session.mockResolvedValue({ userId: 1, ver: 0 });
   m.findRole.mockImplementation((id) => roles.get(id) ?? null);
@@ -36,42 +39,42 @@ beforeEach(() => {
   m.updateUser.mockImplementation((id, roleId) => people.set(id, { ...people.get(id)!, roleId }));
 });
 it("creates trimmed roles with canonical routes and a numeric user count, under the lock", async () => {
-  expect(await createRole(1, { name: " Team ", routes: ["accounts", "directory", "accounts"] })).toEqual({ id: 4, name: "Team", locked: false, users: 0, routes: ["directory", "accounts"] });
+  expect(await createRole(actor, { name: " Team ", routes: ["accounts", "directory", "accounts"] })).toEqual({ id: 4, name: "Team", locked: false, users: 0, routes: ["directory", "accounts"] });
   expect(m.lock).toHaveBeenCalledWith(tx);
   expect(m.lock.mock.invocationCallOrder[0]).toBeLessThan(m.findUser.mock.invocationCallOrder[0]);
   expect(m.insertRole).toHaveBeenCalledWith({ name: "Team", routes: ["directory", "accounts"] }, tx);
 });
 it.each([{ name: "", routes: ["accounts"] }, { name: " ", routes: ["accounts"] }, { name: "x".repeat(201), routes: ["accounts"] }, { name: "Team", routes: [] }, { name: "Team", routes: ["unknown"] }, { name: "Team", routes: "accounts" }, { name: "Team", routes: [null] }])("validates role input %j", async (body) => {
-  await expect(createRole(1, body)).rejects.toMatchObject({ status: 400 });
+  await expect(createRole(actor, body)).rejects.toMatchObject({ status: 400 });
   expect(m.insertRole).not.toHaveBeenCalled();
 });
 it("refuses locked role edits/deletes and unknown/in-use roles", async () => {
-  for (const promise of [patchRole(1, 1, { name: "Changed", routes: ["accounts"] }), removeRole(1, 1)]) await expect(promise).rejects.toMatchObject({ status: 400, message: "Locked role cannot be edited or deleted" });
-  await expect(patchRole(1, 99, { name: "Missing", routes: ["accounts"] })).rejects.toMatchObject({ status: 404 });
-  await expect(removeRole(1, 99)).rejects.toMatchObject({ status: 404 });
+  for (const promise of [patchRole(actor, 1, { name: "Changed", routes: ["accounts"] }), removeRole(actor, 1)]) await expect(promise).rejects.toMatchObject({ status: 400, message: "Locked role cannot be edited or deleted" });
+  await expect(patchRole(actor, 99, { name: "Missing", routes: ["accounts"] })).rejects.toMatchObject({ status: 404 });
+  await expect(removeRole(actor, 99)).rejects.toMatchObject({ status: 404 });
   roles.get(2)!.users = 1;
-  await expect(removeRole(1, 2)).rejects.toMatchObject({ status: 409, message: "Role is in use" });
+  await expect(removeRole(actor, 2)).rejects.toMatchObject({ status: 409, message: "Role is in use" });
   expect(m.updateRole).not.toHaveBeenCalled(); expect(m.deleteRole).not.toHaveBeenCalled();
 });
 it("edits and deletes unused roles", async () => {
-  expect(await patchRole(1, 3, { name: "Both", routes: ["import", "directory"] })).toMatchObject({ name: "Both", routes: ["directory", "import"] });
-  await removeRole(1, 2);
+  expect(await patchRole(actor, 3, { name: "Both", routes: ["import", "directory"] })).toMatchObject({ name: "Both", routes: ["directory", "import"] });
+  await removeRole(actor, 2);
   expect(m.deleteRole).toHaveBeenCalledWith(2, tx);
 });
 it("protects your own Accounts access during role edits and assignments", async () => {
   people.get(1)!.roleId = 2;
-  await expect(patchRole(1, 2, { name: "No accounts", routes: ["import"] })).rejects.toMatchObject({ status: 400, message: "You would lose access to Accounts" });
-  await expect(patchAccountRole(1, 1, { roleId: 3 })).rejects.toMatchObject({ status: 400, message: "You would lose access to Accounts" });
+  await expect(patchRole(actor, 2, { name: "No accounts", routes: ["import"] })).rejects.toMatchObject({ status: 400, message: "You would lose access to Accounts" });
+  await expect(patchAccountRole(actor, 1, { roleId: 3 })).rejects.toMatchObject({ status: 400, message: "You would lose access to Accounts" });
 });
 it("protects the last active Owner, but allows another Owner or an inactive target to move", async () => {
   m.owners.mockResolvedValueOnce(1);
-  await expect(patchAccountRole(1, 2, { roleId: 2 })).rejects.toMatchObject({ status: 400, message: "Cannot leave zero active Owner accounts" });
-  expect(await patchAccountRole(1, 2, { roleId: 2 })).toMatchObject({ role: { id: 2, name: "Managers" } });
+  await expect(patchAccountRole(actor, 2, { roleId: 2 })).rejects.toMatchObject({ status: 400, message: "Cannot leave zero active Owner accounts" });
+  expect(await patchAccountRole(actor, 2, { roleId: 2 })).toMatchObject({ role: { id: 2, name: "Managers" } });
   people.get(2)!.roleId = 1; people.get(2)!.active = false;
-  expect(await patchAccountRole(1, 2, { roleId: 3 })).toMatchObject({ active: false, role: { id: 3 } });
+  expect(await patchAccountRole(actor, 2, { roleId: 3 })).toMatchObject({ active: false, role: { id: 3 } });
 });
 it("re-reads the actor after the lock and refuses inactive, missing, or revoked actors for every write", async () => {
-  const writes = [() => createRole(1, { name: "New", routes: ["import"] }), () => patchRole(1, 3, { name: "New", routes: ["import"] }), () => removeRole(1, 3), () => createAccount(1, account), () => patchAccountRole(1, 2, { roleId: 3 })];
+  const writes = [() => createRole(actor, { name: "New", routes: ["import"] }), () => patchRole(actor, 3, { name: "New", routes: ["import"] }), () => removeRole(actor, 3), () => createAccount(actor, account), () => patchAccountRole(actor, 2, { roleId: 3 })];
   for (const operation of writes) {
     people.get(1)!.active = false;
     await expect(operation()).rejects.toMatchObject({ status: 401 });
@@ -80,37 +83,48 @@ it("re-reads the actor after the lock and refuses inactive, missing, or revoked 
     people.get(1)!.roleId = 1;
   }
   m.findUser.mockResolvedValueOnce(null);
-  await expect(createRole(1, { name: "Missing actor", routes: ["import"] })).rejects.toMatchObject({ status: 401 });
+  await expect(createRole(actor, { name: "Missing actor", routes: ["import"] })).rejects.toMatchObject({ status: 401 });
   m.lock.mockImplementationOnce(() => { people.get(1)!.roleId = 3; });
-  await expect(createRole(1, { name: "Revoked while waiting", routes: ["import"] })).rejects.toMatchObject({ status: 403 });
+  await expect(createRole(actor, { name: "Revoked while waiting", routes: ["import"] })).rejects.toMatchObject({ status: 403 });
 });
-it("creates accounts with bcrypt 12 and exposes the temporary password only on creation", async () => {
-  const { temporaryPassword, ...result } = await createAccount(1, account);
-  expect(result).toEqual({ id: 3, name: "New Person", email: "new@example.test", role: { id: 3, name: "Importers" }, routes: ["import"], active: true, createdAt: "2026-01-01T00:00:00.000Z", mustChangePassword: true });
+it("creates accounts with bcrypt 12, keeping the temporary credential out of list responses", async () => {
+  const { temporaryPassword, ...result } = await createAccount(actor, account);
+  expect(result).toEqual({ id: 3, name: "New Person", email: "new@example.test", role: { id: 3, name: "Importers" }, routes: ["import"], active: true, createdAt: "2026-01-01T00:00:00.000Z", mustChangePassword: true, hasTemporaryPassword: true });
   expect(m.hash).toHaveBeenCalledWith(temporaryPassword, 12);
   const serialized = JSON.stringify(await getAccounts());
   expect(serialized).not.toContain(temporaryPassword);
+  expect(serialized).not.toContain(people.get(3)!.tempPasswordEnc!);
   expect(serialized).not.toContain("private-hash");
   expect((await getRoles())[0].routes).toEqual(["directory", "import", "accounts"]);
 });
+
+it("rejects a previously verified account write when its version changes before the lock is acquired", async () => {
+  const { POST } = await import("@/app/api/roles/route");
+  m.lock.mockImplementationOnce(() => { people.get(1)!.sessionVersion += 1; });
+  const response = await POST(new Request("https://example.test/api/roles", {
+    method: "POST", body: JSON.stringify({ name: "Denied", routes: ["accounts"] }),
+  }));
+  expect(response.status).toBe(401);
+  expect(m.insertRole).not.toHaveBeenCalled();
+});
 it.each([{ name: " " }, { name: "x".repeat(201) }, { email: "bad" }, { email: 3 }, { password: "provided" }, { roleId: -1 }, { roleId: "bad" }, { active: false }, { passwordHash: "supplied" }])("validates account input and rejects unknown keys: %j", async (change) => {
-  await expect(createAccount(1, { ...account, ...change })).rejects.toMatchObject({ status: 400 });
+  await expect(createAccount(actor, { ...account, ...change })).rejects.toMatchObject({ status: 400 });
   expect(m.insertUser).not.toHaveBeenCalled();
 });
 it("rejects extra assignment keys and missing roles/users", async () => {
-  await expect(patchAccountRole(1, 2, { roleId: 3, active: false })).rejects.toMatchObject({ status: 400, field: "active" });
-  await expect(createAccount(1, { ...account, roleId: 99 })).rejects.toMatchObject({ status: 404, message: "Role not found" });
-  await expect(patchAccountRole(1, 99, { roleId: 3 })).rejects.toMatchObject({ status: 404, message: "User not found" });
-  await expect(patchAccountRole(1, 2, { roleId: 99 })).rejects.toMatchObject({ status: 404, message: "Role not found" });
+  await expect(patchAccountRole(actor, 2, { roleId: 3, active: false })).rejects.toMatchObject({ status: 400, field: "active" });
+  await expect(createAccount(actor, { ...account, roleId: 99 })).rejects.toMatchObject({ status: 404, message: "Role not found" });
+  await expect(patchAccountRole(actor, 99, { roleId: 3 })).rejects.toMatchObject({ status: 404, message: "User not found" });
+  await expect(patchAccountRole(actor, 2, { roleId: 99 })).rejects.toMatchObject({ status: 404, message: "Role not found" });
 });
 it("maps unique violations to the specified conflict messages", async () => {
   const duplicate = { cause: { code: "23505" } };
   m.insertRole.mockRejectedValueOnce(duplicate);
-  await expect(createRole(1, { name: "Duplicate", routes: ["import"] })).rejects.toMatchObject({ status: 409, message: "Role name already exists" });
+  await expect(createRole(actor, { name: "Duplicate", routes: ["import"] })).rejects.toMatchObject({ status: 409, message: "Role name already exists" });
   m.updateRole.mockRejectedValueOnce(duplicate);
-  await expect(patchRole(1, 3, { name: "Duplicate", routes: ["import"] })).rejects.toMatchObject({ status: 409, message: "Role name already exists" });
+  await expect(patchRole(actor, 3, { name: "Duplicate", routes: ["import"] })).rejects.toMatchObject({ status: 409, message: "Role name already exists" });
   m.insertUser.mockRejectedValueOnce(duplicate);
-  await expect(createAccount(1, account)).rejects.toMatchObject({ status: 409, message: "Email already exists" });
+  await expect(createAccount(actor, account)).rejects.toMatchObject({ status: 409, message: "Email already exists" });
 });
 it("returns the frozen API response envelopes and requires accounts on all endpoints", async () => {
   const roleRoutes = await import("@/app/api/roles/route"), role = await import("@/app/api/roles/[id]/route"), accountRoutes = await import("@/app/api/users/route"), user = await import("@/app/api/users/[id]/route");

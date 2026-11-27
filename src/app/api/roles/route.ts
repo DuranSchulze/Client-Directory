@@ -9,5 +9,5 @@ export const GET = handle(async () => {
 });
 export const POST = handle(async (request: Request) => {
   const actor = await requireRouteAccess("accounts");
-  return Response.json({ item: await createRole(actor.id, await jsonBody(request)) }, { status: 201 });
+  return Response.json({ item: await createRole(actor, await jsonBody(request)) }, { status: 201 });
 });
