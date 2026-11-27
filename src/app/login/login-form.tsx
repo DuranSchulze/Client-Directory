@@ -36,7 +36,7 @@ export function LoginForm() {
     try {
       const { item } = await request<AuthResponse>("/api/auth/login", { json: { email, password } });
       try { new BroadcastChannel("directory-session").postMessage("in"); } catch { /* unsupported */ }
-      window.location.href = safeNext(requested, item.routes);
+      window.location.href = item.mustChangePassword ? "/change-password" : safeNext(requested, item.routes);
     } catch (err) {
       setError(err instanceof ApiError && err.status === 429 ? "Too many attempts. Wait 15 minutes, then try again."
         : err instanceof ApiError && err.status === 401 ? "Email or password is wrong."

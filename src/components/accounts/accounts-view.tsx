@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Lock, Pencil, Plus, Trash2, UsersRound } from "lucide-react";
+import { Check, Copy, KeyRound, Lock, Pencil, Plus, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,9 +16,9 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Field } from "@/components/shared/field";
 import { Pill } from "@/components/shared/pills";
 import { errorMessage, request } from "@/lib/api/http";
-import { keys, rolesQuery, usersQuery } from "@/lib/api/queries";
+import { keys, meQuery, rolesQuery, usersQuery } from "@/lib/api/queries";
 import { useMutate } from "@/lib/api/use-mutate";
-import type { Account, AccountInput, AccountResponse, Role, RoleInput, RoleResponse } from "@/lib/api-types";
+import type { Account, AccountInput, AccountResponse, CreatedAccountResponse, Role, RoleInput, RoleResponse, TemporaryPassword } from "@/lib/api-types";
 import { ROUTES, type RouteKey } from "@/lib/routes";
 import { stamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -37,13 +37,26 @@ const ACCOUNT_KEYS = [keys.users, keys.roles, keys.me];
 export function AccountsView() {
   const { data: users, error, isPending, isFetching, refetch } = useQuery(usersQuery);
   const { data: roles } = useQuery(rolesQuery);
+  const { data: me } = useQuery(meQuery);
   const [open, setOpen] = useState(false);
+  const [resetting, setResetting] = useState<Account | null>(null);
+  // The one place a temporary password is shown; the API never returns it again.
+  const [issued, setIssued] = useState<{ email: string; password: string; reset: boolean } | null>(null);
+  const reset = useMutate<Account, TemporaryPassword & { email: string }>({
+    fn: (u) => request<TemporaryPassword>(`/api/users/${u.id}/reset-password`, { method: "POST" }).then((r) => ({ ...r, email: u.email })),
+    invalidate: ACCOUNT_KEYS,
+    onDone: (r) => { setResetting(null); setIssued({ email: r.email, password: r.temporaryPassword, reset: true }); },
+    onFail: (e) => { toast.error(`Could not reset the password: ${errorMessage(e)}`); return true; },
+  });
 
   const columns: Column<Account>[] = [
     { key: "name", header: "Name", sortValue: (u) => u.name, className: "font-semibold", render: (u) => <>{u.name}<span className="block text-xs font-normal break-all text-muted-foreground md:hidden">{u.email}</span></> },
     { key: "email", header: "Email", desktopOnly: true, sortValue: (u) => u.email, className: "break-all", render: (u) => u.email },
     { key: "role", header: "Role", sortValue: (u) => u.role.name, className: "w-40 md:w-56", render: (u) => <RoleSelect account={u} roles={roles} /> },
     { key: "created", header: "Created", desktopOnly: true, sortValue: (u) => u.createdAt, className: "whitespace-nowrap text-muted-foreground tabular-nums", render: (u) => stamp(u.createdAt) },
+    { key: "actions", header: "Password", className: "w-24", render: (u) => u.id === me?.id ? null : (
+      <Button size="sm" variant="ghost" aria-label={`Reset password for ${u.name}`} onClick={() => setResetting(u)}><KeyRound />Reset</Button>
+    ) },
   ];
 
   return (
@@ -55,7 +68,12 @@ export function AccountsView() {
         empty={<EmptyState icon={UsersRound} title="No accounts yet." actionLabel="New account" onAction={() => setOpen(true)} />} />
       <RolesSection roles={roles} />
       {/* Remounted per open so the draft always starts empty. */}
-      {open && roles && <NewAccountDialog roles={roles} onClose={() => setOpen(false)} />}
+      {open && roles && <NewAccountDialog roles={roles} onClose={() => setOpen(false)} onCreated={(u) => setIssued({ email: u.email, password: u.temporaryPassword, reset: false })} />}
+      <ConfirmDialog open={!!resetting} onOpenChange={(o) => !o && !reset.isPending && setResetting(null)} pending={reset.isPending} pendingLabel="Resetting…" destructive
+        title={`Reset ${resetting?.name ?? ""}'s password?`} confirmLabel="Reset password"
+        description="Their current password stops working and every device they use is signed out. You get a new temporary password to send them."
+        onConfirm={() => resetting && reset.mutate(resetting)} />
+      {issued && <TemporaryPasswordDialog {...issued} onClose={() => setIssued(null)} />}
     </PageShell>
   );
 }
@@ -192,40 +210,35 @@ function RoleDialog({ role, onClose }: { role: Role | null; onClose: () => void 
   );
 }
 
-function NewAccountDialog({ roles, onClose }: { roles: Role[]; onClose: () => void }) {
+function NewAccountDialog({ roles, onClose, onCreated }: { roles: Role[]; onClose: () => void; onCreated: (u: CreatedAccountResponse["item"]) => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   // Default to the first unlocked role, so a new account is never an Owner by accident.
   const [roleId, setRoleId] = useState(String((roles.find((r) => !r.locked) ?? roles[0])?.id ?? ""));
   const [error, setError] = useState("");
   const role = roles.find((r) => String(r.id) === roleId);
-  const create = useMutate<AccountInput, Account>({
-    fn: (body) => request<AccountResponse>("/api/users", { json: body }).then((r) => r.item),
+  const create = useMutate<AccountInput, CreatedAccountResponse["item"]>({
+    fn: (body) => request<CreatedAccountResponse>("/api/users", { json: body }).then((r) => r.item),
     invalidate: ACCOUNT_KEYS,
-    success: (u) => `Account created for ${u.email}`,
-    onDone: onClose,
+    onDone: (u) => { onClose(); onCreated(u); },
     onFail: (e) => { setError(errorMessage(e)); return true; },
   });
-  const valid = name.trim() && email.trim() && password && roleId;
+  const valid = name.trim() && email.trim() && roleId;
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o && !create.isPending) onClose(); }}>
       <DialogContent>
-        <form onSubmit={(e) => { e.preventDefault(); setError(""); if (valid) create.mutate({ name: name.trim(), email: email.trim(), password, roleId: Number(roleId) }); }}
+        <form onSubmit={(e) => { e.preventDefault(); setError(""); if (valid) create.mutate({ name: name.trim(), email: email.trim(), roleId: Number(roleId) }); }}
           className="flex flex-col gap-4" noValidate>
           <DialogHeader>
             <DialogTitle>New account</DialogTitle>
-            <DialogDescription>The person signs in with this email and password. Share the password securely.</DialogDescription>
+            <DialogDescription>You get a temporary password to send them. They choose their own at first sign-in.</DialogDescription>
           </DialogHeader>
           <Field id="acc-name" label="Name" required>
             <input id="acc-name" autoComplete="off" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} className="field-input" autoFocus />
           </Field>
           <Field id="acc-email" label="Email" required>
             <input id="acc-email" type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} className="field-input" />
-          </Field>
-          <Field id="acc-password" label="Password" required hint="At most 72 bytes.">
-            <input id="acc-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="field-input" />
           </Field>
           <Field id="acc-role" label="Role" required hint={role ? `Can use: ${pages(role.routes)}${role.locked ? ". Owners can change every account and role." : ""}` : undefined}>
             <select id="acc-role" value={roleId} onChange={(e) => setRoleId(e.target.value)} className={cn("field-select h-9 w-full bg-sunk dark:bg-field")}>
@@ -238,6 +251,36 @@ function NewAccountDialog({ roles, onClose }: { roles: Role[]; onClose: () => vo
             <Button type="submit" disabled={!valid || create.isPending}>{create.isPending ? "Creating…" : "Create account"}</Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Shown once after create or reset; closing it drops the password from memory. */
+function TemporaryPasswordDialog({ email, password, reset, onClose }: { email: string; password: string; reset: boolean; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try { await navigator.clipboard.writeText(password); setCopied(true); }
+    catch { toast.error("Could not copy. Select the password and copy it by hand."); }
+  }
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{reset ? "Password reset" : "Account created"}</DialogTitle>
+          <DialogDescription>
+            Send this temporary password to {email} over a private channel. It is shown only now. They must set their own password at sign-in.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center gap-2 rounded-lg bg-sunk p-2 pl-3">
+          <code aria-label="Temporary password" className="min-w-0 flex-1 font-mono text-base break-all select-all">{password}</code>
+          <Button type="button" variant="ghost" onClick={copy} aria-live="polite">
+            {copied ? <Check className="text-success" /> : <Copy />}{copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button type="button" onClick={onClose}>Done</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

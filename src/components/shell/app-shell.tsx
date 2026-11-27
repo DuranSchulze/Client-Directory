@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
-import { Building2, Contact, FileSpreadsheet, Inbox, LogOut, Menu, MessageSquareText, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, Truck, UsersRound } from "lucide-react";
+import { Building2, Contact, FileSpreadsheet, Inbox, KeyRound, LogOut, Menu, MessageSquareText, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun, Truck, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -175,6 +175,10 @@ function SidebarContent({ tip, collapsed, showCollapse, onNavigate, onLogout }: 
                       {theme === "dark" ? "Light mode" : "Dark mode"}
                     </MenuPrimitive.Item>
                   )}
+                  <MenuPrimitive.Item render={<Link href="/change-password" />} onClick={onNavigate} className={ITEM}>
+                    <KeyRound aria-hidden />
+                    Change password
+                  </MenuPrimitive.Item>
                   <MenuPrimitive.Item onClick={onLogout} className={cn(ITEM, "text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive")}>
                     <LogOut aria-hidden />
                     Sign out
@@ -200,6 +204,10 @@ function RouteGate({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const { data: me, isPending, isFetching } = useQuery(meQuery);
   useEffect(() => { void qc.invalidateQueries({ queryKey: keys.me }); }, [qc, pathname]);
+  // A temporary password unlocks nothing but the change page; the API answers 403 to everything else.
+  const forced = !!me?.mustChangePassword;
+  useEffect(() => { if (forced) window.location.replace("/change-password"); }, [forced]);
+  if (forced) return null;
   const route = routeFor(pathname);
   if (!route) return children;
   if (isPending) return null;
