@@ -65,20 +65,20 @@ export function CompanyTab({ detail, onDirty, onOpenContacts, onOpenActivity }: 
   if (editing) {
     return (
       <form onSubmit={submit} noValidate className="flex flex-col gap-3">
-        <div className="rounded-xl bg-sunk p-4 dark:bg-accent/60">
+        <div className="rounded-2xl bg-card p-4 sm:p-5">
           <Field id="edit-name" label="Registered name" required error={errors.name}>
             <input {...fieldProps("edit-name", errors.name)} value={draft.name ?? ""} onChange={(e) => setDraft({ name: e.target.value })} className="field-input" />
           </Field>
         </div>
-        <CompanyGroups groups={GROUPS} draft={draft} setDraft={setDraft} errors={errors} idPrefix="edit" />
-        <div className="rounded-xl bg-sunk p-4 dark:bg-accent/60">
+        <CompanyGroups groups={GROUPS} draft={draft} setDraft={setDraft} errors={errors} idPrefix="edit" groupClassName="rounded-2xl bg-card p-4 sm:p-5 dark:bg-card" />
+        <div className="rounded-2xl bg-card p-4 sm:p-5">
           <Field id="edit-accountNo" label="Bank account number" error={errors.accountNo}
             hint={c.accountNoLast4 ? `Stored encrypted as •••• ${c.accountNoLast4}. Leave blank to keep it.` : "Stored encrypted; shown masked everywhere."}>
             <input {...fieldProps("edit-accountNo", errors.accountNo)} value={accountNo} autoComplete="off" inputMode="numeric"
               onChange={(e) => { setAccountNo(e.target.value); onDirty(true); }} className="field-input" />
           </Field>
         </div>
-        <div className="sticky bottom-0 -mx-1 flex justify-end gap-2 bg-card px-1 pt-3">
+        <div className="sticky bottom-0 -mx-5 flex justify-end gap-2 bg-card/95 px-5 py-3 backdrop-blur-xs sm:-mx-6 sm:px-6">
           <Button type="button" variant="ghost" onClick={() => { setEditing(false); setErrors({}); setDraftState(toDraft(c)); setAccountNo(""); onDirty(false); }}>Cancel</Button>
           <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save changes"}</Button>
         </div>
@@ -95,11 +95,11 @@ export function CompanyTab({ detail, onDirty, onOpenContacts, onOpenActivity }: 
       <Section title="Payments" action={<Button variant="link" size="sm" onClick={onOpenActivity}>See activity</Button>}>
         {payments.length === 0 ? <p className="text-sm text-muted-foreground">No verified payments yet.</p> : (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            <div><dt className="text-xs text-muted-foreground">Total paid</dt>
-              <dd className="mt-0.5 flex flex-col font-bold tabular-nums">{totals.map((t) => <span key={t.currency ?? "unknown"}>{money({ amount: t.amount, currency: t.currency })}</span>)}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Payments</dt><dd className="mt-0.5 font-semibold tabular-nums">{payments.length}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Last payment</dt><dd className="mt-0.5 tabular-nums">{day(lastPaid)}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Stage</dt><dd className="mt-0.5">{detail.activity.stage ? STAGE_LABEL[detail.activity.stage] : DASH}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Total paid</dt>
+              <dd className="mt-1 flex flex-col font-bold tabular-nums">{totals.map((t) => <span key={t.currency ?? "unknown"}>{money({ amount: t.amount, currency: t.currency })}</span>)}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Payments</dt><dd className="mt-1 font-semibold tabular-nums">{payments.length}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Last payment</dt><dd className="mt-1 tabular-nums">{day(lastPaid)}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Stage</dt><dd className="mt-1">{detail.activity.stage ? STAGE_LABEL[detail.activity.stage] : DASH}</dd></div>
           </dl>
         )}
       </Section>
@@ -112,16 +112,16 @@ export function CompanyTab({ detail, onDirty, onOpenContacts, onOpenActivity }: 
           </dl>
         </Section>
       )}
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Client details</h3>
+      <div className="mt-4 mb-3 flex items-center justify-between px-1">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Client details</h3>
         <Button variant="secondary" size="sm" onClick={() => { setDraftState(toDraft(c)); setEditing(true); }}><Pencil />Edit</Button>
       </div>
       {GROUPS.filter((g) => !g.showWhen || g.showWhen(c)).map((g) => (
         <Section key={g.title} title={g.title}>
-          <dl className="grid grid-cols-[7.5rem_1fr] gap-x-4 gap-y-2 text-sm sm:grid-cols-[9rem_1fr]">
+          <dl className="grid grid-cols-[7.5rem_1fr] gap-x-4 gap-y-2.5 text-sm sm:grid-cols-[9.5rem_1fr]">
             {g.fields.map((f) => [
               <dt key={`${f.key}-t`} className="text-muted-foreground">{f.label}</dt>,
-              <dd key={`${f.key}-d`} className="min-w-0 break-words">{display(f, c)}</dd>,
+              <dd key={`${f.key}-d`} className="min-w-0 [overflow-wrap:anywhere]">{display(f, c)}</dd>,
             ])}
             {g.title === "Payroll / AP" && <AccountRow companyId={c.id} last4={c.accountNoLast4} />}
           </dl>

@@ -44,7 +44,7 @@ export function ContactsTab({ detail }: { detail: CompanyDetail }) {
           {sorted.map((c) => {
             const seen = c.emails.some((e) => gmailEmails.has(e.toLowerCase()));
             return (
-              <li key={c.id} className="rounded-xl bg-card p-3">
+              <li key={c.id} className="rounded-xl bg-sunk p-3.5">
                 <div className="flex items-start gap-3">
                   <span aria-hidden className="hidden size-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold sm:flex">{initials(c.name ?? c.emails[0])}</span>
                   <div className="min-w-0 flex-1">
@@ -114,7 +114,7 @@ function AddContactForm({ companyId, first, onDone }: { companyId: number; first
     add.mutate({ name: d.name.trim() || null, designation: d.designation.trim() || null, emails: [d.email.trim().toLowerCase()], phones: d.phone.trim() ? [d.phone.trim()] : [], billingRole: d.billingRole });
   }
   return (
-    <form onSubmit={submit} noValidate className="mb-3 grid gap-3 rounded-xl bg-card p-3 sm:grid-cols-2">
+    <form onSubmit={submit} noValidate className="mb-3 grid gap-3 rounded-xl bg-sunk p-4 sm:grid-cols-2">
       <Field id="ct-name" label="Contact name" error={errors.name}><input {...fieldProps("ct-name", errors.name)} value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} className="field-input" autoFocus /></Field>
       <Field id="ct-designation" label="Designation" error={errors.designation}><input {...fieldProps("ct-designation", errors.designation)} value={d.designation} onChange={(e) => setD({ ...d, designation: e.target.value })} className="field-input" /></Field>
       <Field id="ct-email" label="Email" required error={errors.email}><input {...fieldProps("ct-email", errors.email)} type="email" value={d.email} onChange={(e) => setD({ ...d, email: e.target.value })} className="field-input" /></Field>

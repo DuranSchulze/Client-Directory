@@ -34,11 +34,11 @@ export function ClientSheet({ id, onClose }: { id: number | null; onClose: () =>
   const c = data?.company;
   return (
     <Sheet open={id !== null} onOpenChange={(open) => { if (!open) guard(onClose); }}>
-      <SheetContent side="right" showCloseButton={false} className="w-full gap-0 border-0 bg-card p-0 data-[side=right]:w-full sm:max-w-[600px] data-[side=right]:sm:max-w-[600px]">
+      <SheetContent side="right" showCloseButton={false} className="w-full gap-0 overflow-hidden border-0 bg-card p-0 data-[side=right]:w-full sm:max-w-[600px] data-[side=right]:sm:max-w-[600px]">
         <div className="flex items-start gap-4 px-5 pt-5 pb-3 sm:px-6 sm:pt-6">
           <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-base font-bold text-primary-foreground">{initials(c?.name)}</span>
           <div className="min-w-0 flex-1">
-            <SheetTitle className="text-xl leading-snug font-bold tracking-tight text-balance sm:text-2xl">{c?.name ?? (isPending ? "Loading client…" : "Client")}</SheetTitle>
+            <SheetTitle className="text-xl leading-snug font-bold tracking-tight text-balance [overflow-wrap:anywhere] sm:text-2xl">{c?.name ?? (isPending ? "Loading client…" : "Client")}</SheetTitle>
             <SheetDescription className="mt-0.5 text-sm text-muted-foreground">
               {c ? [c.alias, c.type, `${data!.contacts.length} contact${data!.contacts.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ") : " "}
             </SheetDescription>
@@ -47,25 +47,28 @@ export function ClientSheet({ id, onClose }: { id: number | null; onClose: () =>
                 <EngagementPill engagement={c.engagement} isNew={c.isNew} />
                 {data!.probity.length > 0 && <Pill tone="info">Probity</Pill>}
                 {data!.activity.stage && <Pill tone="neutral">Gmail · {STAGE_LABEL[data!.activity.stage]}</Pill>}
-                {c.entities.map((e) => <EntityTag key={e}>{e}</EntityTag>)}
+                {c.entities.map((e) => <EntityTag key={e} className="m-0">{e}</EntityTag>)}
               </div>
             )}
           </div>
-          <Button variant="ghost" size="icon" aria-label="Close client" onClick={() => guard(onClose)}><X className="size-5" /></Button>
+          <Button variant="ghost" size="icon" aria-label="Close client" onClick={() => guard(onClose)} className="-mt-1 -mr-1.5 shrink-0 text-muted-foreground hover:text-foreground"><X className="size-5" /></Button>
         </div>
-        <div role="tablist" aria-label="Client sections" className="sticky top-0 z-10 flex gap-1 overflow-x-auto bg-card px-5 py-2 sm:px-6">
+        <div role="tablist" aria-label="Client sections" className="flex shrink-0 gap-1.5 overflow-x-auto bg-card px-5 pt-1 pb-3 sm:px-6">
           {(c ? TABS : TABS.slice(0, 1)).map((t) => (
             <button key={t} role="tab" type="button" id={`tab-${t}`} aria-selected={tab === t} aria-controls={`panel-${t}`}
               onClick={() => { if (t !== tab) guard(() => { setDirty(false); setTab(t); }); }}
-              className={cn("rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              className={cn("shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-lift hover:text-foreground")}>
-              {t}{t === "Contacts" && data ? <span className="ml-1.5 text-xs opacity-70 tabular-nums">{data.contacts.length}</span> : null}
+              {t}{t === "Contacts" && data ? (
+                <span className={cn("ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-px text-[11px] font-bold tabular-nums",
+                  tab === t ? "bg-primary-foreground/15 text-primary-foreground" : "bg-accent text-muted-foreground")}>{data.contacts.length}</span>
+              ) : null}
             </button>
           ))}
         </div>
-        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="flex-1 overflow-y-auto px-5 pt-2 pb-8 sm:px-6">
+        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="flex-1 overflow-y-auto bg-sunk px-5 pt-4 pb-8 sm:px-6">
           {error ? <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
-            : !data ? <div role="status" aria-label="Loading" className="flex flex-col gap-3">{[0, 1, 2].map((i) => <div key={i} className="h-32 animate-pulse rounded-xl bg-sunk" />)}</div>
+            : !data ? <div role="status" aria-label="Loading" className="flex flex-col gap-3">{[0, 1, 2].map((i) => <div key={i} className="skeleton-sweep h-28 rounded-2xl bg-card" />)}</div>
             : tab === "Company" ? <CompanyTab detail={data} onDirty={setDirty} onOpenContacts={() => setTab("Contacts")} onOpenActivity={() => setTab("Activity")} />
             : tab === "Contacts" ? <ContactsTab detail={data} />
             : tab === "Activity" ? <ActivityTab activity={data.activity} />
@@ -82,7 +85,7 @@ export function ClientSheet({ id, onClose }: { id: number | null; onClose: () =>
 /** Tonal section block used across the sheet tabs. */
 export function Section({ title, action, children, className }: { title: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn("mb-3 rounded-xl bg-sunk p-4 dark:bg-accent/60", className)}>
+    <section className={cn("mb-3 rounded-2xl bg-card p-4 sm:p-5", className)}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-[13px] font-semibold text-muted-foreground">{title}</h3>
         {action}

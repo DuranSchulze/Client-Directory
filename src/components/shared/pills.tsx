@@ -41,6 +41,6 @@ export function StageSteps({ stage }: { stage: Stage | null }) {
   );
 }
 
-export function EntityTag({ children }: { children: React.ReactNode }) {
-  return <span className="mr-1 mb-1 inline-block rounded-md bg-accent px-1.5 py-px text-[11px] font-bold tracking-wide">{children}</span>;
+export function EntityTag({ className, children }: { className?: string; children: React.ReactNode }) {
+  return <span className={cn("mr-1 mb-1 inline-block rounded-md bg-accent px-1.5 py-px text-[11px] font-bold tracking-wide", className)}>{children}</span>;
 }

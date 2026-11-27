@@ -64,13 +64,13 @@ export function CompanyInput({ def, draft, setDraft, error, idPrefix }: {
   return <Field id={id} label={def.label} error={error} hint={def.hint} className={cn(def.full && "sm:col-span-2")}>{control}</Field>;
 }
 
-export function CompanyGroups({ groups, draft, setDraft, errors, idPrefix }: {
-  groups: FieldGroup[]; draft: CompanyDraft; setDraft: (patch: CompanyDraft) => void; errors: Partial<Record<string, string>>; idPrefix: string;
+export function CompanyGroups({ groups, draft, setDraft, errors, idPrefix, groupClassName }: {
+  groups: FieldGroup[]; draft: CompanyDraft; setDraft: (patch: CompanyDraft) => void; errors: Partial<Record<string, string>>; idPrefix: string; groupClassName?: string;
 }) {
   return (
     <>
       {groups.map((g) => (
-        <fieldset key={g.title} className="rounded-xl bg-sunk p-4 dark:bg-accent/60">
+        <fieldset key={g.title} className={cn("rounded-xl bg-sunk p-4 dark:bg-accent/60", groupClassName)}>
           <legend className="float-left mb-3 w-full text-[13px] font-semibold text-muted-foreground">{g.title}</legend>
           <div className="clear-both grid gap-3 sm:grid-cols-2">
             {g.fields.map((f) => <CompanyInput key={f.key} def={f} draft={draft} setDraft={setDraft} error={errors[f.key]} idPrefix={idPrefix} />)}

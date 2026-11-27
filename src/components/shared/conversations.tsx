@@ -48,7 +48,7 @@ function ConversationDetail({ t }: { t: TimelineItem }) {
         <Pill tone={ev.tone}>{ev.label}</Pill>
         {t.amounts.map((m, j) => <span key={j} className="font-semibold tabular-nums">{money(m)}</span>)}
       </div>
-      <p className="rounded-xl bg-sunk p-4 text-sm leading-relaxed whitespace-pre-wrap break-words dark:bg-accent/60">{body || DASH}</p>
+      <p className="rounded-xl bg-sunk p-4 text-sm leading-relaxed whitespace-pre-wrap break-words">{body || DASH}</p>
       {(t.snippet?.length ?? 0) >= SNIPPET_CAP && <p className="text-xs text-muted-foreground">Preview only. The Scraper stores the first {SNIPPET_CAP} characters of each message.</p>}
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Department</dt><dd className="min-w-0 break-words">{t.department || DASH}</dd>
@@ -60,12 +60,12 @@ function ConversationDetail({ t }: { t: TimelineItem }) {
 }
 
 /** Newest first, grouped by month. Snippet is "Subject — body"; the subject leads. */
-export function Conversations({ items, truncated, title = "Recent conversations" }: { items: TimelineItem[]; truncated: boolean; title?: string }) {
+export function Conversations({ items, truncated, title = "Recent conversations", cardClassName }: { items: TimelineItem[]; truncated: boolean; title?: string; cardClassName?: string }) {
   const [shown, setShown] = useState(PAGE);
   // Keep the last item after closing so the dialog doesn't go blank during its exit animation.
   const [open, setOpen] = useState<TimelineItem | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  if (items.length === 0) return <p className="rounded-xl bg-sunk p-4 text-sm text-muted-foreground dark:bg-accent/60">No staged messages.</p>;
+  if (items.length === 0) return <p className="rounded-2xl bg-card p-4 text-sm text-muted-foreground">No staged messages.</p>;
   const sorted = [...items].reverse().slice(0, shown);
   const groups: { label: string; rows: typeof sorted }[] = [];
   for (const t of sorted) {
@@ -75,23 +75,24 @@ export function Conversations({ items, truncated, title = "Recent conversations"
   }
   return (
     <div>
-      <h3 className="mb-2 text-[13px] font-semibold text-muted-foreground">{title} ({Math.min(shown, items.length)} of {items.length}{truncated ? "; older messages not loaded" : ""})</h3>
+      <h3 className="mb-2.5 px-1 text-[13px] font-semibold text-muted-foreground">{title} ({Math.min(shown, items.length)} of {items.length}{truncated ? "; older messages not loaded" : ""})</h3>
       {groups.map((g) => (
         <section key={g.label} className="mb-4">
-          <h4 className="mb-1.5 px-1 text-xs font-semibold text-muted-foreground">{g.label}</h4>
-          <ol className="flex flex-col gap-1.5">
+          <h4 className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{g.label}</h4>
+          <ol className="flex flex-col gap-2">
             {g.rows.map((t, i) => {
               const ev = EVENT[t.stage] ?? { label: t.stage, tone: "neutral" as PillTone };
               const { subject, body } = split(t);
               return (
                 <li key={`${t.raw_item_id}-${i}`}>
                   <button type="button" onClick={() => { setOpen(t); setIsOpen(true); }} aria-haspopup="dialog"
-                    className="flex w-full gap-3 rounded-xl bg-sunk px-3.5 py-3 text-left outline-none transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-accent active:translate-y-0 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0 dark:bg-accent/60 dark:hover:bg-accent">
-                  <span className="w-11 shrink-0 pt-0.5 text-xs font-semibold text-muted-foreground tabular-nums">{t.date ? new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Asia/Manila" }) : DASH}</span>
+                    className={cn("flex w-full gap-3 rounded-2xl px-4 py-3 text-left outline-none transition-[background-color,transform] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+                      cardClassName ?? "bg-sunk hover:bg-lift dark:bg-accent/60 dark:hover:bg-accent")}>
+                  <span className="w-12 shrink-0 pt-0.5 text-xs font-semibold text-muted-foreground tabular-nums">{t.date ? new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Asia/Manila" }) : DASH}</span>
                   <div className="min-w-0 flex-1">
                     {subject && <p className="text-[13px] font-semibold break-words">{subject}</p>}
                     {body && <p className={cn("line-clamp-2 text-[13px] break-words", subject ? "mt-0.5 text-muted-foreground" : "text-foreground")}>{body}</p>}
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <Pill tone={ev.tone}>{ev.label}</Pill>
                       {t.amounts.map((m, j) => <span key={j} className="font-semibold text-foreground tabular-nums">{money(m)}</span>)}
                       {[t.department, ...mailboxesOf(t)].filter(Boolean).length > 0 && <span className="min-w-0 break-words">{[t.department, mailboxesOf(t).join(", ")].filter(Boolean).join(" · ")}</span>}
@@ -106,7 +107,7 @@ export function Conversations({ items, truncated, title = "Recent conversations"
       ))}
       {shown < items.length && <Button variant="secondary" size="sm" onClick={() => setShown((n) => n + PAGE)}>Show older ({items.length - shown})</Button>}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
           {open && <ConversationDetail t={open} />}
         </DialogContent>
       </Dialog>

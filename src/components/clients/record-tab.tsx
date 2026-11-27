@@ -38,7 +38,7 @@ export function RecordTab({ detail }: { detail: CompanyDetail }) {
       <Section title="Linked Scraper candidates">
         {detail.activity.candidates.length === 0 ? <p className="text-sm text-muted-foreground">None.</p> : (
           <ul className="flex flex-wrap gap-1.5">
-            {detail.activity.candidates.map((x) => <li key={x.id} className="rounded-md bg-card px-2 py-0.5 font-mono text-xs tabular-nums">#{x.id}</li>)}
+            {detail.activity.candidates.map((x) => <li key={x.id} className="rounded-md bg-sunk px-2 py-0.5 font-mono text-xs tabular-nums">#{x.id}</li>)}
           </ul>
         )}
       </Section>
