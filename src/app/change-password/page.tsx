@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ChangePasswordForm } from "./change-password-form";
 
 export const metadata = { title: "Change password · Client Directory" };
@@ -6,7 +7,7 @@ export const metadata = { title: "Change password · Client Directory" };
 export default function Page() {
   return (
     <main className="flex min-h-screen items-center justify-center p-6 sm:p-10">
-      <ChangePasswordForm />
+      <Suspense fallback={null}><ChangePasswordForm /></Suspense>
     </main>
   );
 }
