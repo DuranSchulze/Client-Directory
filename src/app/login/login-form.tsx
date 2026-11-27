@@ -10,7 +10,7 @@ import type { RouteKey } from "@/lib/routes";
 import { homeFor, routeFor } from "@/lib/access";
 
 // The pages under src/app/(app); anything else (auth pages, API paths, typos) falls back to home instead of a 404.
-const APP_PAGES = /^\/(?:clients|probity|needs-company|inquiries|suppliers|dept-emails|import|accounts)(?:\/|$)/;
+const APP_PAGES = /^\/(?:clients|probity|needs-company|inquiries|suppliers|dept-emails|import|accounts)\/?$/;
 
 /** Only same-origin app pages the account's role can open are followed; auth pages, API paths and anything unknown go to its home. */
 export function safeNext(v: string | null, routes: RouteKey[]) {

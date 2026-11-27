@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, KeyRound, Lock, Pencil, Plus, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
@@ -42,11 +42,15 @@ export function AccountsView() {
   const [resetting, setResetting] = useState<Account | null>(null);
   // Only this state holds a temporary password; mutations return metadata, so nothing secret lingers in the query cache.
   const [issued, setIssued] = useState<Issued | null>(null);
+  // Every password shown takes a ticket; a reveal reply is dropped if a newer one (create, reset or reveal) was shown since it started.
+  const ticket = useRef(0);
+  const show = (i: Issued) => { ticket.current += 1; setIssued(i); };
+  const startReveal = () => { const mine = ++ticket.current; return (i: Issued) => { if (ticket.current === mine) setIssued(i); }; };
   // One credential operation at a time (reveal or reset), so a slow response can't replace a newer password in the dialog.
   const [revealing, setRevealing] = useState(false);
   const reset = useMutate<Account, null>({
     fn: (u) => request<TemporaryPassword>(`/api/users/${u.id}/reset-password`, { method: "POST" })
-      .then((r) => { setIssued({ email: u.email, password: r.temporaryPassword, kind: "reset" }); return null; }),
+      .then((r) => { show({ email: u.email, password: r.temporaryPassword, kind: "reset" }); return null; }),
     invalidate: ACCOUNT_KEYS,
     onDone: () => setResetting(null),
     onFail: (e) => { toast.error(`Could not reset the password: ${errorMessage(e)}`); return true; },
@@ -59,7 +63,7 @@ export function AccountsView() {
     { key: "created", header: "Created", desktopOnly: true, sortValue: (u) => u.createdAt, className: "whitespace-nowrap text-muted-foreground tabular-nums", render: (u) => stamp(u.createdAt) },
     { key: "actions", header: "Password", className: "w-60", render: (u) => u.id === me?.id ? null : (
       <div className="flex flex-wrap items-center gap-1 md:flex-nowrap">
-        {u.hasTemporaryPassword && <ShowTemporaryButton account={u} onShow={setIssued} busy={revealing || reset.isPending} setBusy={setRevealing} />}
+        {u.hasTemporaryPassword && <ShowTemporaryButton account={u} start={startReveal} busy={revealing || reset.isPending} setBusy={setRevealing} />}
         <Button size="sm" variant="ghost" aria-label={`Reset password for ${u.name}`} disabled={revealing} onClick={() => setResetting(u)}><KeyRound />Reset</Button>
       </div>
     ) },
@@ -74,7 +78,7 @@ export function AccountsView() {
         empty={<EmptyState icon={UsersRound} title="No accounts yet." actionLabel="New account" onAction={() => setOpen(true)} />} />
       <RolesSection roles={roles} />
       {/* Remounted per open so the draft always starts empty. */}
-      {open && roles && <NewAccountDialog roles={roles} onClose={() => setOpen(false)} onCreated={setIssued} />}
+      {open && roles && <NewAccountDialog roles={roles} onClose={() => setOpen(false)} onCreated={show} />}
       <ConfirmDialog open={!!resetting} onOpenChange={(o) => !o && !reset.isPending && setResetting(null)} pending={reset.isPending} pendingLabel="Resetting…" destructive
         title={`Reset ${resetting?.name ?? ""}'s password?`} confirmLabel="Reset password"
         description="Their current password stops working and every device they use is signed out. You get a new temporary password to send them."
@@ -266,9 +270,10 @@ function NewAccountDialog({ roles, onClose, onCreated }: { roles: Role[]; onClos
 type Issued = { email: string; password: string; kind: "created" | "reset" | "stored" };
 
 /** Fetches a waiting account's temporary password on demand; it stays retrievable until they set their own. */
-function ShowTemporaryButton({ account, onShow, busy, setBusy }: { account: Account; onShow: (issued: Issued) => void; busy: boolean; setBusy: (b: boolean) => void }) {
+function ShowTemporaryButton({ account, start, busy, setBusy }: { account: Account; start: () => (issued: Issued) => void; busy: boolean; setBusy: (b: boolean) => void }) {
   async function show() {
     setBusy(true);
+    const onShow = start();
     try {
       const r = await request<TemporaryPassword>(`/api/users/${account.id}/temporary-password`);
       onShow({ email: account.email, password: r.temporaryPassword, kind: "stored" });
