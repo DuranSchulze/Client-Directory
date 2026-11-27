@@ -33,7 +33,7 @@ export function Conversations({ items, truncated, title = "Recent conversations"
   }
   return (
     <div>
-      <h3 className="mb-2 text-[13px] font-semibold text-muted-foreground">{title}{truncated ? " (latest 200)" : ""}</h3>
+      <h3 className="mb-2 text-[13px] font-semibold text-muted-foreground">{title} ({Math.min(shown, items.length)} of {items.length}{truncated ? "; older messages not loaded" : ""})</h3>
       {groups.map((g) => (
         <section key={g.label} className="mb-4">
           <h4 className="mb-1.5 px-1 text-xs font-semibold text-muted-foreground">{g.label}</h4>
@@ -52,7 +52,7 @@ export function Conversations({ items, truncated, title = "Recent conversations"
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <Pill tone={ev.tone}>{ev.label}</Pill>
                       {t.amounts.map((m, j) => <span key={j} className="font-semibold text-foreground tabular-nums">{money(m)}</span>)}
-                      {[t.department, t.mailbox].filter(Boolean).length > 0 && <span className="min-w-0 break-all">{[t.department, t.mailbox].filter(Boolean).join(" · ")}</span>}
+                      {[t.department, ...(t.mailboxes ?? [t.mailbox])].filter(Boolean).length > 0 && <span className="min-w-0 break-words">{[t.department, (t.mailboxes ?? [t.mailbox]).filter(Boolean).join(", ")].filter(Boolean).join(" · ")}</span>}
                     </div>
                   </div>
                 </li>
